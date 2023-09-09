@@ -1,19 +1,31 @@
-from calculator.parser import BinaryOperation, BinaryOperator, Expression, UnaryOperation, UnaryOperator
+from calculator.parser import BinaryOperation, BinaryOperator, Expression, UnaryOperation, UnaryOperator, Variable
 
 
-def evaluate(expressions: list[Expression]) -> list[float]:
+def evaluate(expressions: list[Expression]) -> tuple[list[float], dict[str, float]]:
     results: list[float] = []
+    variables: dict[str, float] = dict()
     for expression in expressions:
-        results.append(evaluate_expression(expression))
-    return results
+        results.append(evaluate_expression(expression, variables))
+    return results, variables
 
 
-def evaluate_expression(expression: Expression) -> float:
+def evaluate_expression(expression: Expression, variables: dict[str, float]) -> float:
     if isinstance(expression, float):
         return expression
+    elif isinstance(expression, Variable):
+        if expression.name in variables:
+            return variables[expression.name]
+        else:
+            raise RuntimeError(f"Reference to non-eixstend variable {expression.name}")
     elif isinstance(expression, BinaryOperation):
-        left_res = evaluate_expression(expression.left)
-        right_res = evaluate_expression(expression.right)
+        right_res = evaluate_expression(expression.right, variables)
+        if expression.operator == BinaryOperator.ASSIGN:
+            if isinstance(expression.left, Variable):
+                variables[expression.left.name] = right_res
+                return right_res
+            else:
+                raise RuntimeError("Assigning only works for variables")
+        left_res = evaluate_expression(expression.left, variables)
         if expression.operator == BinaryOperator.ADD:
             return left_res + right_res
         elif expression.operator == BinaryOperator.SUB:
@@ -23,11 +35,11 @@ def evaluate_expression(expression: Expression) -> float:
         elif expression.operator == BinaryOperator.DIV:
             return left_res / right_res
         elif expression.operator == BinaryOperator.POW:
-            return left_res ** right_res
+            return left_res**right_res
         else:
             raise RuntimeError(f"Unexpected binary operator: {expression.operator}")
     elif isinstance(expression, UnaryOperation):
-        operand = evaluate_expression(expression.operand)
+        operand = evaluate_expression(expression.operand, variables)
         if expression.operator is UnaryOperator.NEG:
             return -operand
         elif expression.operator is UnaryOperator.POS:

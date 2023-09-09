@@ -1,6 +1,6 @@
 import enum
-from dataclasses import dataclass
 import re
+from dataclasses import dataclass
 
 from calculator.utils import PrintableEnum
 
@@ -111,7 +111,7 @@ def untokenize(tokens: list[Token]) -> str:
     # ( 1 + 2 ) => (1 + 2)
     result = re.sub(r"\(\s+", "(", result)
     result = re.sub(r"\s+\)", ")", result)
-    
+
     # 4 ^ 5 => 4^5
     result = re.sub(r"\s+^\s+", "^", result)
     return result

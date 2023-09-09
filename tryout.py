@@ -1,20 +1,23 @@
 from calculator.parser import ParserError, parse
 from calculator.runtime import evaluate
-from calculator.tokenizer import TokenizerError, tokenize, untokenize
+from calculator.tokenizer import TokenizerError, tokenize
 
 for code in [
-    # "5",
-    # "-1",
-    # "1 + 1",
-    # "-1 + 1",
-    # "1 + -1",
-    # "4 + 6 * 3",
-    # "(4 + 6)",
-    # "(4+6) * 3",
-    # "80225/+2",
-    # "7/6/2000",
-    "5^2"
-    # "a = 1; b2b = 2; c = a + b2b"
+    "5",
+    "-1",
+    "1 + 1",
+    "-1 + 1",
+    "1 + -1",
+    "4 + 6 * 3",
+    "(4 + 6)",
+    "(4+6) * 3",
+    "80225/+2",
+    "7/6/2000",
+    "5^2",
+    "a = 1; b= 2; c = a + b",
+    "var = (1 + 14 * (54^2))",
+    "10 / 5/ 2",
+    "a = b = 10",
 ]:
     print("=" * 10)
     print(f"code: {code!r}")
@@ -27,12 +30,14 @@ for code in [
     print(f"tokens: {' '.join(str(t) for t in tokens)}")
 
     try:
-        expression = parse(tokens)[0]
+        expressions = parse(tokens)
     except ParserError as e:
         print(e)
         continue
+    expressions_str = "\n".join(f" {i + 1:> 2}: {expr}" for i, expr in enumerate(expressions))
+    print(f"ast:\n{expressions_str}")
 
-    print(f"ast: {expression}")
-
-    result = evaluate([expression])[0]
-    print(f"result: {result}")
+    results, variables = evaluate(expressions)
+    results_str = "\n".join(f" {i + 1:> 2}: {res}" for i, res in enumerate(results))
+    print(f"expression results:\n{results_str}")
+    print(f"variables: {variables}")
