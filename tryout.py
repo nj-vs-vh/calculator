@@ -24,7 +24,7 @@ for code in [
     try:
         tokens = tokenize(code)
     except TokenizerError as e:
-        print(e.format(code))
+        print(e)
         continue
 
     print(f"tokens: {' '.join(str(t) for t in tokens)}")
@@ -37,7 +37,8 @@ for code in [
     expressions_str = "\n".join(f" {i + 1:> 2}: {expr}" for i, expr in enumerate(expressions))
     print(f"ast:\n{expressions_str}")
 
-    results, variables = evaluate(expressions)
+    variables: dict[str, float] = dict()
+    results = evaluate(expressions, variables)
     results_str = "\n".join(f" {i + 1:> 2}: {res}" for i, res in enumerate(results))
     print(f"expression results:\n{results_str}")
     print(f"variables: {variables}")

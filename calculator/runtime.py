@@ -1,12 +1,11 @@
 from calculator.parser import BinaryOperation, BinaryOperator, Expression, UnaryOperation, UnaryOperator, Variable
 
 
-def evaluate(expressions: list[Expression]) -> tuple[list[float], dict[str, float]]:
+def evaluate(expressions: list[Expression], variables: dict[str, float]) -> list[float]:
     results: list[float] = []
-    variables: dict[str, float] = dict()
     for expression in expressions:
         results.append(evaluate_expression(expression, variables))
-    return results, variables
+    return results
 
 
 def evaluate_expression(expression: Expression, variables: dict[str, float]) -> float:

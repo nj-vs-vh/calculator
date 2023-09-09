@@ -8,19 +8,20 @@ from calculator.utils import PrintableEnum
 @dataclass
 class TokenizerError(Exception):
     errmsg: str
+    code: str
     error_char_idx: int
 
-    def format(self, code: str) -> str:
+    def __str__(self) -> str:
         print_start_idx = max(0, self.error_char_idx - 10)
         print_ellipsis_pre = print_start_idx > 0
-        print_end_idx = min(len(code), self.error_char_idx + 10)
-        print_ellipsis_post = print_end_idx < len(code)
+        print_end_idx = min(len(self.code), self.error_char_idx + 10)
+        print_ellipsis_post = print_end_idx < len(self.code)
         return "\n".join(
             [
                 f"[Tokenizer error] {self.errmsg}",
                 (
                     ("..." if print_ellipsis_pre else "")
-                    + f"{code[print_start_idx:print_end_idx]}"
+                    + f"{self.code[print_start_idx:print_end_idx]}"
                     + ("..." if print_ellipsis_post else "")
                 ),
                 " " * (self.error_char_idx - print_start_idx + (3 if print_ellipsis_pre else 0)) + "^",
@@ -73,28 +74,28 @@ SINGLE_CHAR_TOKENS = {
 }
 
 
-def tokenize(s: str) -> list[Token]:
+def tokenize(code: str) -> list[Token]:
     i = 0
     tokens: list[Token] = []
-    while i < len(s):
-        if _is_valid_in_number(s[i]):
+    while i < len(code):
+        if _is_valid_in_number(code[i]):
             number_end_idx = i + 1
-            while number_end_idx < len(s) and _is_valid_in_number(s[number_end_idx]):
+            while number_end_idx < len(code) and _is_valid_in_number(code[number_end_idx]):
                 number_end_idx += 1
-            tokens.append(Token(type=TokenType.NUMBER, lexeme=s[i:number_end_idx]))
+            tokens.append(Token(type=TokenType.NUMBER, lexeme=code[i:number_end_idx]))
             i = number_end_idx - 1  # to account for += 1 later
-        elif s[i].isalpha():
+        elif code[i].isalpha():
             ident_end_idx = i + 1
-            while ident_end_idx < len(s) and s[ident_end_idx].isalnum():
+            while ident_end_idx < len(code) and code[ident_end_idx].isalnum():
                 ident_end_idx += 1
-            tokens.append(Token(type=TokenType.IDENTIFIER, lexeme=s[i:ident_end_idx]))
+            tokens.append(Token(type=TokenType.IDENTIFIER, lexeme=code[i:ident_end_idx]))
             i = ident_end_idx - 1  # to account for += 1 later
-        elif s[i] in SINGLE_CHAR_TOKENS:
-            tokens.append(Token(type=SINGLE_CHAR_TOKENS[s[i]], lexeme=s[i]))
-        elif s[i].isspace():
+        elif code[i] in SINGLE_CHAR_TOKENS:
+            tokens.append(Token(type=SINGLE_CHAR_TOKENS[code[i]], lexeme=code[i]))
+        elif code[i].isspace():
             pass
         else:
-            raise TokenizerError(f"Unexpected character: {s[i]!r}", error_char_idx=i)
+            raise TokenizerError(f"Unexpected character: {code[i]!r}", code=code, error_char_idx=i)
         i += 1
 
     if tokens and tokens[-1].type is not TokenType.EXPR_END:

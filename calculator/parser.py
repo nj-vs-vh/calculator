@@ -14,7 +14,7 @@ class ParserError(Exception):
 
     def __str__(self) -> str:
         parsed_tokens = self.tokens[: self.error_token_idx]
-        filler_whitespace = " " * len(untokenize(parsed_tokens)) + " "
+        filler_whitespace = " " * len(untokenize(parsed_tokens))
         return "\n".join([f"Parser error: {self.errmsg}", untokenize(self.tokens), filler_whitespace + "^"])
 
 
@@ -166,9 +166,9 @@ def _consume_operand(tokens: list[Token], i: int) -> tuple[Optional[Expression],
             j += 1
         bracketed_tokens = tokens[i + 1 : j - 1]
         if bracket_count:
-            raise ParserError(f"Unclosed bracket", tokens, error_token_idx=i + 1)
+            raise ParserError(f"Unclosed bracket", tokens, error_token_idx=i)
         if not bracketed_tokens:
-            raise ParserError(f"Empty parenthesis", tokens=tokens, error_token_idx=i + 1)
+            raise ParserError(f"Empty parenthesis", tokens=tokens, error_token_idx=i)
         return parse(bracketed_tokens + [Token(type=TokenType.EXPR_END, lexeme="")])[0], j
     else:
         return None, i
