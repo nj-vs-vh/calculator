@@ -22,6 +22,8 @@ def evaluate_expression(expression: Expression) -> float:
             return left_res * right_res
         elif expression.operator == BinaryOperator.DIV:
             return left_res / right_res
+        elif expression.operator == BinaryOperator.POW:
+            return left_res ** right_res
         else:
             raise RuntimeError(f"Unexpected binary operator: {expression.operator}")
     elif isinstance(expression, UnaryOperation):

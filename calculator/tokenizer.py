@@ -1,5 +1,6 @@
 import enum
 from dataclasses import dataclass
+import re
 
 from calculator.utils import PrintableEnum
 
@@ -36,6 +37,9 @@ class TokenType(PrintableEnum):
     BRACKET_OPEN = enum.auto()
     BRACKET_CLOSE = enum.auto()
     EXPR_END = enum.auto()
+    CARET = enum.auto()
+    EQUAL = enum.auto()
+    IDENTIFIER = enum.auto()
 
 
 @dataclass
@@ -43,9 +47,16 @@ class Token:
     type: TokenType
     lexeme: str
 
+    def __str__(self) -> str:
+        return f"<{self.type}>{self.lexeme}"
+
 
 def _is_valid_in_number(s: str) -> bool:
     return s.isdigit() or s == "."
+
+
+def _is_valid_in_identifier(s: str) -> bool:
+    return s.isalnum()
 
 
 SINGLE_CHAR_TOKENS = {
@@ -57,6 +68,8 @@ SINGLE_CHAR_TOKENS = {
     ")": TokenType.BRACKET_CLOSE,
     ";": TokenType.EXPR_END,
     "\n": TokenType.EXPR_END,
+    "=": TokenType.EQUAL,
+    "^": TokenType.CARET,
 }
 
 
@@ -70,6 +83,12 @@ def tokenize(s: str) -> list[Token]:
                 number_end_idx += 1
             tokens.append(Token(type=TokenType.NUMBER, lexeme=s[i:number_end_idx]))
             i = number_end_idx - 1  # to account for += 1 later
+        elif s[i].isalpha():
+            ident_end_idx = i + 1
+            while ident_end_idx < len(s) and s[ident_end_idx].isalnum():
+                ident_end_idx += 1
+            tokens.append(Token(type=TokenType.IDENTIFIER, lexeme=s[i:ident_end_idx]))
+            i = ident_end_idx - 1  # to account for += 1 later
         elif s[i] in SINGLE_CHAR_TOKENS:
             tokens.append(Token(type=SINGLE_CHAR_TOKENS[s[i]], lexeme=s[i]))
         elif s[i].isspace():
@@ -85,4 +104,14 @@ def tokenize(s: str) -> list[Token]:
 
 
 def untokenize(tokens: list[Token]) -> str:
-    return " ".join(t.lexeme for t in tokens)
+    result = " ".join(t.lexeme for t in tokens)
+
+    result = re.sub(r"\s+;", ";", result)
+
+    # ( 1 + 2 ) => (1 + 2)
+    result = re.sub(r"\(\s+", "(", result)
+    result = re.sub(r"\s+\)", ")", result)
+    
+    # 4 ^ 5 => 4^5
+    result = re.sub(r"\s+^\s+", "^", result)
+    return result

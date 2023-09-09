@@ -31,6 +31,7 @@ class BinaryOperator(PrintableEnum):
     SUB = enum.auto()
     MUL = enum.auto()
     DIV = enum.auto()
+    POW = enum.auto()
 
 
 @dataclass
@@ -74,6 +75,7 @@ def get_op_precedence(op: BinaryOperator | UnaryOperator) -> int:
         BinaryOperator.DIV,
         UnaryOperator.NEG,
         UnaryOperator.POS,
+        BinaryOperator.POW,
     ].index(op)
 
 
@@ -100,6 +102,7 @@ def _consume_expression(tokens: list[Token], i: int, min_op_precedence: Optional
                     TokenType.MINUS: BinaryOperator.SUB,
                     TokenType.STAR: BinaryOperator.MUL,
                     TokenType.SLASH: BinaryOperator.DIV,
+                    TokenType.CARET: BinaryOperator.POW,
                 }.get(operator_token.type)
                 if operator is None:
                     raise ParserError(
