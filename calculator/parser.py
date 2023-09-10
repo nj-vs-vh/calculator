@@ -1,6 +1,6 @@
 import enum
 from dataclasses import dataclass
-from typing import Optional
+from typing import Optional, Union
 
 from calculator.tokenizer import Token, TokenType, untokenize
 from calculator.utils import PrintableEnum
@@ -51,8 +51,8 @@ class Variable:
     name: str
 
 
-Operator = BinaryOperator | UnaryOperator
-Expression = Value | Variable | BinaryOperation | UnaryOperation
+Operator = Union[BinaryOperator, UnaryOperator]
+Expression = Union[Value, Variable, BinaryOperation, UnaryOperation]
 
 
 def parse(tokens: list[Token]) -> list[Expression]:

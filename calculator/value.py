@@ -25,6 +25,7 @@ class Float(Value):
 
 @dataclass
 class BuiltinFunc(Value):
+    name: str
     fn: Callable[[Value], Value]
 
     @classmethod
