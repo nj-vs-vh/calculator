@@ -27,6 +27,7 @@ class BinaryOperator(PrintableEnum):
     POW = enum.auto()
     ASSIGN = enum.auto()
     FEED_TO_FUNC = enum.auto()
+    FUNC_CALL = enum.auto()
 
 
 @dataclass
@@ -77,11 +78,12 @@ def get_op_precedence(op: Operator) -> int:
         UnaryOperator.NEG,
         BinaryOperator.POW,
         BinaryOperator.FEED_TO_FUNC,
+        BinaryOperator.FUNC_CALL,
     ].index(op)
 
 
 def is_rtl_op(op: Operator) -> bool:
-    return op is BinaryOperator.ASSIGN
+    return op is BinaryOperator.ASSIGN or op is BinaryOperator.FUNC_CALL
 
 
 def _consume_expression(tokens: list[Token], i: int, prev_operator: Optional[Operator]) -> tuple[Expression, int]:
@@ -100,8 +102,7 @@ def _consume_expression(tokens: list[Token], i: int, prev_operator: Optional[Ope
                 result = left
                 break
             else:
-                operator_token = tokens[i]
-                operator = {
+                next_operator = {
                     TokenType.PLUS: BinaryOperator.ADD,
                     TokenType.MINUS: BinaryOperator.SUB,
                     TokenType.STAR: BinaryOperator.MUL,
@@ -109,26 +110,26 @@ def _consume_expression(tokens: list[Token], i: int, prev_operator: Optional[Ope
                     TokenType.CARET: BinaryOperator.POW,
                     TokenType.EQUAL: BinaryOperator.ASSIGN,
                     TokenType.RIGHT_ANGLE_BRACKET: BinaryOperator.FEED_TO_FUNC,
-                }.get(operator_token.type)
-                if operator is None:
-                    raise ParserError(
-                        f"Binary operator expected, found {operator_token.type}",
-                        tokens=tokens,
-                        error_token_idx=i,
-                    )
+                }.get(tokens[i].type)
+                if next_operator is None:
+                    next_operator = BinaryOperator.FUNC_CALL
+                    operator_tokens_count = 0
+                else:
+                    operator_tokens_count = 1
+
                 if prev_operator is not None:
-                    curr_precedence = get_op_precedence(operator)
+                    curr_precedence = get_op_precedence(next_operator)
                     prev_precedence = get_op_precedence(prev_operator)
                     if curr_precedence < prev_precedence or (
-                        curr_precedence == prev_precedence and not is_rtl_op(operator)
+                        curr_precedence == prev_precedence and not is_rtl_op(next_operator)
                     ):
                         result = left
                         break
 
-                right, i = _consume_expression(tokens, i + 1, prev_operator=operator)
+                right, i = _consume_expression(tokens, i + operator_tokens_count, prev_operator=next_operator)
                 if right is None:
                     raise ParserError(f"Right operand expected", tokens=tokens, error_token_idx=i)
-                result = BinaryOperation(operator=operator, left=left, right=right)
+                result = BinaryOperation(operator=next_operator, left=left, right=right)
         else:
             unary_operator_token = tokens[i]
             unary_operator = {

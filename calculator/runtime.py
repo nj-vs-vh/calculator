@@ -1,6 +1,5 @@
-import math
 from dataclasses import dataclass
-from typing import Callable, Type
+from typing import Type
 
 from calculator.builtins import BUILTIN_FUNCS
 from calculator.parser import BinaryOperation, BinaryOperator, Expression, UnaryOperation, UnaryOperator, Variable
@@ -50,6 +49,8 @@ def evaluate_expression(expression: Expression, variables: dict[str, Value]) -> 
             return eval_binary_operation(table=pow_impls, a=left_res, b=right_res, op_name="Power")
         elif expression.operator == BinaryOperator.FEED_TO_FUNC:
             return eval_binary_operation(table=feed_to_func_impls, a=left_res, b=right_res, op_name="Feed to func")
+        elif expression.operator == BinaryOperator.FUNC_CALL:
+            return eval_binary_operation(table=func_call_impls, a=left_res, b=right_res, op_name="Function call")
         else:
             raise RuntimeError(f"Unexpected binary operator: {expression.operator}")
     elif isinstance(expression, UnaryOperation):
@@ -78,7 +79,8 @@ sub_impls: BinaryOperationImplTable = [((Float, Float), lambda a, b: Float(a.v -
 mul_impls: BinaryOperationImplTable = [((Float, Float), lambda a, b: Float(a.v * b.v))]  # type: ignore
 div_impls: BinaryOperationImplTable = [((Float, Float), lambda a, b: Float(a.v / b.v))]  # type: ignore
 pow_impls: BinaryOperationImplTable = [((Float, Float), lambda a, b: Float(a.v**b.v))]  # type: ignore
-feed_to_func_impls: BinaryOperationImplTable = [((Value, BuiltinFunc), lambda a, b: b.fn(a))]  # type: ignore
+feed_to_func_impls: BinaryOperationImplTable = [((Value, BuiltinFunc), lambda arg, bf: bf.fn(arg))]  # type: ignore
+func_call_impls: BinaryOperationImplTable = [((BuiltinFunc, Value), lambda bf, arg: bf.fn(arg))]  # type: ignore
 
 UnaryOperationImplTable = list[tuple[Type[Value], UnaryOperationImpl]]
 
