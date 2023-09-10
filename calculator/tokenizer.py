@@ -41,6 +41,7 @@ class TokenType(PrintableEnum):
     CARET = enum.auto()
     EQUAL = enum.auto()
     IDENTIFIER = enum.auto()
+    RIGHT_ANGLE_BRACKET = enum.auto()
 
 
 @dataclass
@@ -71,6 +72,7 @@ SINGLE_CHAR_TOKENS = {
     "\n": TokenType.EXPR_END,
     "=": TokenType.EQUAL,
     "^": TokenType.CARET,
+    ">": TokenType.RIGHT_ANGLE_BRACKET,
 }
 
 

@@ -2,7 +2,6 @@ from calculator.parser import ParserError, parse
 from calculator.runtime import evaluate
 from calculator.tokenizer import TokenizerError, tokenize
 
-
 if __name__ == "__main__":
     variables: dict[str, float] = dict()
 

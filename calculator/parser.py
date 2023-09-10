@@ -4,6 +4,7 @@ from typing import Optional
 
 from calculator.tokenizer import Token, TokenType, untokenize
 from calculator.utils import PrintableEnum
+from calculator.value import Float, Value
 
 
 @dataclass
@@ -25,6 +26,7 @@ class BinaryOperator(PrintableEnum):
     DIV = enum.auto()
     POW = enum.auto()
     ASSIGN = enum.auto()
+    FEED_TO_FUNC = enum.auto()
 
 
 @dataclass
@@ -36,7 +38,6 @@ class BinaryOperation:
 
 class UnaryOperator(PrintableEnum):
     NEG = enum.auto()
-    POS = enum.auto()
 
 
 @dataclass
@@ -51,7 +52,7 @@ class Variable:
 
 
 Operator = BinaryOperator | UnaryOperator
-Expression = float | Variable | BinaryOperation | UnaryOperation
+Expression = Value | Variable | BinaryOperation | UnaryOperation
 
 
 def parse(tokens: list[Token]) -> list[Expression]:
@@ -74,8 +75,8 @@ def get_op_precedence(op: Operator) -> int:
         BinaryOperator.MUL,
         BinaryOperator.DIV,
         UnaryOperator.NEG,
-        UnaryOperator.POS,
         BinaryOperator.POW,
+        BinaryOperator.FEED_TO_FUNC,
     ].index(op)
 
 
@@ -107,6 +108,7 @@ def _consume_expression(tokens: list[Token], i: int, prev_operator: Optional[Ope
                     TokenType.SLASH: BinaryOperator.DIV,
                     TokenType.CARET: BinaryOperator.POW,
                     TokenType.EQUAL: BinaryOperator.ASSIGN,
+                    TokenType.RIGHT_ANGLE_BRACKET: BinaryOperator.FEED_TO_FUNC,
                 }.get(operator_token.type)
                 if operator is None:
                     raise ParserError(
@@ -131,7 +133,6 @@ def _consume_expression(tokens: list[Token], i: int, prev_operator: Optional[Ope
             unary_operator_token = tokens[i]
             unary_operator = {
                 TokenType.MINUS: UnaryOperator.NEG,
-                TokenType.PLUS: UnaryOperator.POS,
             }.get(unary_operator_token.type)
             if unary_operator is None:
                 raise ParserError(
@@ -152,7 +153,7 @@ def _consume_operand(tokens: list[Token], i: int) -> tuple[Optional[Expression],
         return None, i
     first = tokens[i]
     if first.type is TokenType.NUMBER:
-        return float(first.lexeme), i + 1
+        return Float(v=float(first.lexeme)), i + 1
     elif first.type is TokenType.IDENTIFIER:
         return Variable(first.lexeme), i + 1
     elif first.type is TokenType.BRACKET_OPEN:
