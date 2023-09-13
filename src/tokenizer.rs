@@ -170,7 +170,7 @@ fn match_char(ch: char) -> CharMatch {
     }
 }
 
-pub fn untokenize(tokens: &Vec<Token>) -> String {
+pub fn untokenize(tokens: &[Token]) -> String {
     let mut res = String::new();
     let token_iter_1 = tokens.iter();
     let mut token_iter_2 = tokens.iter();

@@ -84,7 +84,7 @@ mod tokenizer_error_tests {
 
 #[derive(Debug)]
 pub struct ParserError<'a> {
-    pub tokens: &'a Vec<Token<'a>>,
+    pub tokens: &'a [Token<'a>],
     pub errmsg: String,
     pub error_token_idx: usize,
 }
@@ -113,9 +113,8 @@ impl Display for ParserError<'_> {
             .into();
         let code_context_line = untokenize(&code_context_tokens);
 
-        let code_context_pre_err = untokenize(
-            &self.tokens[self.error_token_idx - start_offset..=self.error_token_idx].into(),
-        );
+        let code_context_pre_err =
+            untokenize(&self.tokens[self.error_token_idx - start_offset..=self.error_token_idx]);
         let code_context_err = untokenize(&vec![self.tokens[self.error_token_idx].clone()]);
         let mut pointing_arrow_line =
             " ".repeat(code_context_pre_err.len() - code_context_err.len());
