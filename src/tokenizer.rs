@@ -2,7 +2,7 @@ use super::errors;
 use std::fmt;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum TokenType {
+pub enum TokenType {
     Number,
     Plus,
     Minus,
@@ -16,15 +16,15 @@ enum TokenType {
     Identifier,
 }
 
-#[derive(PartialEq, Eq)]
+#[derive(PartialEq, Eq, Clone)]
 pub struct Token<'a> {
-    t: TokenType,
-    lexeme: &'a str,
+    pub t: TokenType,
+    pub lexeme: &'a str,
 }
 
 impl fmt::Debug for Token<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{} ({:?})", self.lexeme, self.t)
+        write!(f, "\"{}\" ({:?})", self.lexeme, self.t)
     }
 }
 
@@ -59,7 +59,7 @@ pub fn tokenize<'a>(code: &'a String) -> Result<Vec<Token<'a>>, errors::Tokenize
                     return Err(errors::TokenizerError {
                         code: &code,
                         errmsg: String::from("unexpected character"),
-                        error_char_idx: lookahead_idx,
+                        error_char_idx: lookahead_idx - 1,
                     })
                 }
             };

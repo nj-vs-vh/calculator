@@ -1,8 +1,8 @@
-use std::{cmp::min, error::Error, fmt::Display};
+use std::{error::Error, fmt::Display};
 
-use itertools::Itertools;
-
+use crate::tokenizer::untokenize;
 use crate::tokenizer::Token;
+use crate::tokenizer::TokenType;
 
 #[derive(Debug)]
 pub struct TokenizerError<'a> {
@@ -13,44 +13,27 @@ pub struct TokenizerError<'a> {
 
 impl Error for TokenizerError<'_> {}
 
-const DISPLAYED_CODE_CONTEXT_CHARS: usize = 30;
-
 impl Display for TokenizerError<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let code_chars: Vec<char> = self.code.chars().collect();
-
-        let mut start_idx = self
-            .error_char_idx
-            .saturating_sub(DISPLAYED_CODE_CONTEXT_CHARS);
-        let mut is_ellipsis_prefix = start_idx > 0;
-        if let Some((rel_newline_idx, _)) = code_chars[start_idx..self.error_char_idx]
-            .iter()
+        let &start_offset = &self.code[..self.error_char_idx]
+            .chars()
+            .rev()
             .enumerate()
-            .find_or_first(|&(_, &ch)| ch == '\n')
-        {
-            start_idx += rel_newline_idx + 1;
-            is_ellipsis_prefix = false;
-        }
+            .find(|&(_, ch)| ch == '\n')
+            .map(|(idx, _)| idx)
+            .unwrap_or(self.error_char_idx);
 
-        let end_idx = min(
-            self.error_char_idx + DISPLAYED_CODE_CONTEXT_CHARS,
-            code_chars.len(),
-        );
+        let &end_offset = &self.code[self.error_char_idx..]
+            .chars()
+            .enumerate()
+            .find(|&(_, ch)| ch == '\n')
+            .map(|(idx, _)| idx)
+            .unwrap_or(self.code.len() - self.error_char_idx);
 
-        let mut code_context_line = if is_ellipsis_prefix {
-            String::from("...")
-        } else {
-            String::new()
-        };
+        let code_context_line =
+            &self.code[self.error_char_idx - start_offset..self.error_char_idx + end_offset];
 
-        let code_context = code_chars[start_idx..end_idx].iter().collect::<String>();
-        code_context_line.push_str(&code_context);
-        if end_idx < code_chars.len() {
-            code_context_line.push_str("...")
-        }
-
-        let mut pointing_arrow_line =
-            " ".repeat(self.error_char_idx - start_idx - (if is_ellipsis_prefix { 3 } else { 0 }));
+        let mut pointing_arrow_line = " ".repeat(start_offset);
 
         pointing_arrow_line.push_str("^");
 
@@ -62,23 +45,87 @@ impl Display for TokenizerError<'_> {
     }
 }
 
-#[derive(Debug)]
-pub struct ParserError<'a> {
-    tokens: &'a Vec<Token<'a>>,
-    errmsg: String,
-    error_token_idx: usize,
+#[cfg(test)]
+mod tokenizer_error_tests {
+    use super::*;
+    use rstest::rstest;
+
+    #[rstest]
+    #[case("abcdefg", 3, "Tokenizer error\n> abcdefg\n     ^ example error")]
+    #[case("abcdefg", 0, "Tokenizer error\n> abcdefg\n  ^ example error")]
+    #[case(
+        "abcdefg\nsecond line ok\n third line",
+        5,
+        "Tokenizer error\n> abcdefg\n       ^ example error"
+    )]
+    #[case(
+        "line 1\nline 2\nline 3\nline 4",
+        15,
+        "Tokenizer error\n> line 3\n   ^ example error"
+    )]
+    #[case(
+        "line 1\nline 2\nline 3",
+        15,
+        "Tokenizer error\n> line 3\n   ^ example error"
+    )]
+    fn test_tokenizer_error_display(
+        #[case] code: &str,
+        #[case] error_char_idx: usize,
+        #[case] expected_formatted_error: &str,
+    ) {
+        let e = TokenizerError {
+            code: code,
+            errmsg: "example error".into(),
+            error_char_idx: error_char_idx,
+        };
+        assert_eq!(format!("{}", e), expected_formatted_error);
+    }
 }
 
-// impl Error for ParserError<'_> {}
+#[derive(Debug)]
+pub struct ParserError<'a> {
+    pub tokens: &'a Vec<Token<'a>>,
+    pub errmsg: String,
+    pub error_token_idx: usize,
+}
 
-// const DISPLAYED_CODE_CONTEXT_TOKENS: usize = 10;
+impl Error for ParserError<'_> {}
 
-// impl Display for ParserError<'_> {
-//     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-//         write!(
-//             f,
-//             "Parser error\n> {}\n  {} {}",
-//             code_context_line, pointing_arrow_line, self.errmsg
-//         )
-//     }
-// }
+impl Display for ParserError<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let &start_offset = &self.tokens[..self.error_token_idx]
+            .iter()
+            .rev()
+            .enumerate()
+            .find(|&(_, tok)| tok.t == TokenType::ExprEnd)
+            .map(|(idx, _)| idx)
+            .unwrap_or(self.error_token_idx);
+
+        let &end_offset = &self.tokens[self.error_token_idx..]
+            .iter()
+            .enumerate()
+            .find(|&(_, tok)| tok.t == TokenType::ExprEnd)
+            .map(|(idx, _)| idx)
+            .unwrap_or(self.tokens.len() - self.error_token_idx);
+
+        let code_context_tokens: Vec<Token<'_>> = self.tokens
+            [self.error_token_idx - start_offset..self.error_token_idx + end_offset]
+            .into();
+        let code_context_line = untokenize(&code_context_tokens);
+
+        let code_context_pre_err = untokenize(
+            &self.tokens[self.error_token_idx - start_offset..=self.error_token_idx].into(),
+        );
+        let code_context_err = untokenize(&vec![self.tokens[self.error_token_idx].clone()]);
+        let mut pointing_arrow_line =
+            " ".repeat(code_context_pre_err.len() - code_context_err.len());
+
+        pointing_arrow_line.push_str(&"^".repeat(code_context_err.len()));
+
+        write!(
+            f,
+            "Parser error\n> {}\n  {} {}",
+            code_context_line, pointing_arrow_line, self.errmsg
+        )
+    }
+}
