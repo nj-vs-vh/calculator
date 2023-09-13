@@ -110,6 +110,14 @@ pub fn tokenize<'a>(code: &'a String) -> Result<Vec<Token<'a>>, errors::Tokenize
         };
     }
 
+    // inserting an implied expression end token, if not present
+    if tokens[tokens.len() - 1].t != TokenType::ExprEnd {
+        tokens.push(Token {
+            t: TokenType::ExprEnd,
+            lexeme: ";",
+        })
+    }
+
     return Ok(tokens);
 }
 
@@ -171,6 +179,8 @@ pub fn untokenize(tokens: &Vec<Token>) -> String {
             (TokenType::Caret, _) => "",
             (_, TokenType::Caret) => "",
             (TokenType::Identifier, TokenType::RoundBracketOpen) => "",
+            (_, TokenType::ExprEnd) => "",
+            (TokenType::ExprEnd, _) => "\n",
             _ => " ",
         };
         res.push_str(delimiter);

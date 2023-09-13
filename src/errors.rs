@@ -36,3 +36,5 @@ impl Display for TokenizerError<'_> {
         )
     }
 }
+
+// pub struct ParserError
