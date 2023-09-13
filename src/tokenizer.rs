@@ -41,7 +41,7 @@ pub fn tokenize<'a>(code: &'a String) -> Result<Vec<Token<'a>>, errors::Tokenize
     while let Some((lookahead_idx, lookahead_char)) = code_chars.next() {
         // matching singe-char tokens, possibly left over from prev iteration / long token matching
         if let Some(current_char) = current_char {
-            match match_single_char_token(current_char) {
+            match match_char(current_char) {
                 CharMatch::Token(token_type) => tokens.push(Token {
                     t: token_type,
                     lexeme: &code[lookahead_idx - 1..lookahead_idx],
@@ -94,7 +94,7 @@ pub fn tokenize<'a>(code: &'a String) -> Result<Vec<Token<'a>>, errors::Tokenize
 
     // matching the last leftover character, if exists
     if let Some(last_char) = current_char {
-        match match_single_char_token(last_char) {
+        match match_char(last_char) {
             CharMatch::Token(tt) => tokens.push(Token {
                 t: tt,
                 lexeme: &code[code.len() - 1..code.len()],
@@ -141,7 +141,7 @@ enum CharMatch {
     Unexpected,
 }
 
-fn match_single_char_token(ch: char) -> CharMatch {
+fn match_char(ch: char) -> CharMatch {
     match ch {
         '+' => CharMatch::Token(TokenType::Plus),
         '-' => CharMatch::Token(TokenType::Minus),
@@ -155,6 +155,28 @@ fn match_single_char_token(ch: char) -> CharMatch {
         ws if ws.is_whitespace() => CharMatch::Whitespace,
         _ => CharMatch::Unexpected,
     }
+}
+
+pub fn untokenize(tokens: &Vec<Token>) -> String {
+    let mut res = String::new();
+    let token_iter_1 = tokens.iter();
+    let mut token_iter_2 = tokens.iter();
+    token_iter_2.next();
+
+    for (token_l, token_r) in token_iter_1.zip(token_iter_2) {
+        res.push_str(token_l.lexeme);
+        let delimiter = match (token_l.t, token_r.t) {
+            (TokenType::RoundBracketOpen, _) => "",
+            (_, TokenType::RoundBracketClose) => "",
+            (TokenType::Caret, _) => "",
+            (_, TokenType::Caret) => "",
+            (TokenType::Identifier, TokenType::RoundBracketOpen) => "",
+            _ => " ",
+        };
+        res.push_str(delimiter);
+    }
+    res.push_str(tokens[tokens.len() - 1].lexeme);
+    return res;
 }
 
 #[cfg(test)]

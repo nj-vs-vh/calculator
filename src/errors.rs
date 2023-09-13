@@ -1,8 +1,4 @@
-use std::{
-    cmp::{max, min},
-    error::Error,
-    fmt::Display,
-};
+use std::{cmp::min, error::Error, fmt::Display};
 
 #[derive(Debug)]
 pub struct TokenizerError<'a> {
