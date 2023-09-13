@@ -39,6 +39,14 @@ pub fn tokenize<'a>(code: &'a String) -> Result<Vec<Token<'a>>, errors::Tokenize
     let mut current_char: Option<char> = None;
 
     while let Some((lookahead_idx, lookahead_char)) = code_chars.next() {
+        if !lookahead_char.is_ascii() {
+            return Err(errors::TokenizerError {
+                code: code,
+                errmsg: "non-ASCII character".into(),
+                error_char_idx: lookahead_idx,
+            });
+        }
+
         // matching singe-char tokens, possibly left over from prev iteration / long token matching
         if let Some(current_char) = current_char {
             match match_char(current_char) {
@@ -51,13 +59,13 @@ pub fn tokenize<'a>(code: &'a String) -> Result<Vec<Token<'a>>, errors::Tokenize
                     return Err(errors::TokenizerError {
                         code: &code,
                         errmsg: String::from("unexpected character"),
-                        error_idx: lookahead_idx,
+                        error_char_idx: lookahead_idx,
                     })
                 }
             };
         }
 
-        // lookahead matching of "long" tokens with separate funcs
+        // lookahead matching of "long" tokens with subiteration
         let maybe_long_token = match lookahead_char {
             numeric_char if is_numeric_char(numeric_char) => {
                 let number_end_idx: usize;
@@ -69,10 +77,10 @@ pub fn tokenize<'a>(code: &'a String) -> Result<Vec<Token<'a>>, errors::Tokenize
                     lexeme: &code[lookahead_idx..number_end_idx],
                 })
             }
-            first_identifier_char if first_identifier_char.is_alphabetic() => {
+            first_identifier_char if first_identifier_char.is_ascii_alphabetic() => {
                 let identifier_end_idx: usize;
                 (identifier_end_idx, current_char) =
-                    iter_while_predicate(&mut code_chars, |ch| ch.is_alphanumeric())
+                    iter_while_predicate(&mut code_chars, |ch| ch.is_ascii_alphanumeric())
                         .unwrap_or((code.len(), None));
                 Some(Token {
                     t: TokenType::Identifier,
@@ -104,7 +112,7 @@ pub fn tokenize<'a>(code: &'a String) -> Result<Vec<Token<'a>>, errors::Tokenize
                 return Err(errors::TokenizerError {
                     code: &code,
                     errmsg: String::from("unexpected character"),
-                    error_idx: code.len() - 1,
+                    error_char_idx: code.len() - 1,
                 })
             }
         };
@@ -129,11 +137,8 @@ where
     Predicate: Fn(char) -> bool,
 {
     while let Some((idx, ch)) = it.next() {
-        match ch {
-            breaking_char if !predicate(breaking_char) => {
-                return Some((idx, Some(breaking_char)));
-            }
-            _ => {}
+        if !predicate(ch) {
+            return Some((idx, Some(ch)));
         }
     }
     return None;
@@ -195,49 +200,57 @@ mod tests {
     use rstest::rstest;
 
     #[rstest]
-    #[case("1", vec![Token{t: TokenType::Number, lexeme: "1"}])]
-    #[case("  1     ", vec![Token{t: TokenType::Number, lexeme: "1"}])]
-    #[case("1 1", vec![Token{t: TokenType::Number, lexeme: "1"}, Token{t: TokenType::Number, lexeme: "1"}])]
+    #[case("1", vec![Token{t: TokenType::Number, lexeme: "1"}, Token{t: TokenType::ExprEnd, lexeme: ";"}])]
+    #[case("  1     ", vec![Token{t: TokenType::Number, lexeme: "1"}, Token{t: TokenType::ExprEnd, lexeme: ";"}])]
+    #[case("1 1", vec![Token{t: TokenType::Number, lexeme: "1"}, Token{t: TokenType::Number, lexeme: "1"}, Token{t: TokenType::ExprEnd, lexeme: ";"}])]
     #[case("1 + 1", vec![
         Token{t: TokenType::Number, lexeme: "1"},
         Token{t: TokenType::Plus, lexeme: "+"},
-        Token{t: TokenType::Number, lexeme: "1"}
+        Token{t: TokenType::Number, lexeme: "1"},
+        Token{t: TokenType::ExprEnd, lexeme: ";"}
     ])]
     #[case("1+1", vec![
         Token{t: TokenType::Number, lexeme: "1"},
         Token{t: TokenType::Plus, lexeme: "+"},
-        Token{t: TokenType::Number, lexeme: "1"}
+        Token{t: TokenType::Number, lexeme: "1"},
+        Token{t: TokenType::ExprEnd, lexeme: ";"}
     ])]
     #[case("1  + 1", vec![
         Token{t: TokenType::Number, lexeme: "1"},
         Token{t: TokenType::Plus, lexeme: "+"},
-        Token{t: TokenType::Number, lexeme: "1"}
+        Token{t: TokenType::Number, lexeme: "1"},
+        Token{t: TokenType::ExprEnd, lexeme: ";"}
     ])]
     #[case("1 +1", vec![
         Token{t: TokenType::Number, lexeme: "1"},
         Token{t: TokenType::Plus, lexeme: "+"},
-        Token{t: TokenType::Number, lexeme: "1"}
+        Token{t: TokenType::Number, lexeme: "1"},
+        Token{t: TokenType::ExprEnd, lexeme: ";"}
     ])]
     #[case("1+ 1", vec![
         Token{t: TokenType::Number, lexeme: "1"},
         Token{t: TokenType::Plus, lexeme: "+"},
-        Token{t: TokenType::Number, lexeme: "1"}
+        Token{t: TokenType::Number, lexeme: "1"},
+        Token{t: TokenType::ExprEnd, lexeme: ";"}
     ])]
     #[case("   1      + \n  1  ", vec![
         Token{t: TokenType::Number, lexeme: "1"},
         Token{t: TokenType::Plus, lexeme: "+"},
-        Token{t: TokenType::Number, lexeme: "1"}
+        Token{t: TokenType::Number, lexeme: "1"},
+        Token{t: TokenType::ExprEnd, lexeme: ";"}
     ])]
-    #[case("a", vec![Token{t: TokenType::Identifier, lexeme: "a"}])]
+    #[case("a", vec![Token{t: TokenType::Identifier, lexeme: "a"}, Token{t: TokenType::ExprEnd, lexeme: ";"}])]
     #[case("a^b", vec![
         Token{t: TokenType::Identifier, lexeme: "a"},
         Token{t: TokenType::Caret, lexeme: "^"},
         Token{t: TokenType::Identifier, lexeme: "b"},
+        Token{t: TokenType::ExprEnd, lexeme: ";"},
     ])]
-    #[case("1  /  abc123привет            ", vec![
+    #[case("1  /  abc123def            ", vec![
         Token{t: TokenType::Number, lexeme: "1"},
         Token{t: TokenType::Slash, lexeme: "/"},
-        Token{t: TokenType::Identifier, lexeme: "abc123привет"},
+        Token{t: TokenType::Identifier, lexeme: "abc123def"},
+        Token{t: TokenType::ExprEnd, lexeme: ";"},
     ])]
     fn test_tokenizer(#[case] code: &str, #[case] expected_result: Vec<Token>) {
         let code_ = String::from(code);
