@@ -87,7 +87,7 @@ pub fn parse<'a>(tokens: &'a [Token<'a>]) -> Result<Expression, ParserError<'a>>
     while i < tokens.len() {
         let expr: Expression;
         (expr, i) = consume_expression(tokens, i, None)?;
-        i += 1;
+        i += 1; // skipping expression end
         exprs.push(expr);
     }
     return Ok(Expression::Scope(exprs));
@@ -178,86 +178,88 @@ fn consume_operand<'a>(
         return Ok((None, i));
     }
     let next = &tokens[i];
-    if next.t == TokenType::ExprEnd {
-        return Ok((None, i));
-    } else if next.t == TokenType::Number {
-        return match next.lexeme.parse::<f32>() {
+    match next.t {
+        TokenType::ExprEnd => Ok((None, i)),
+        TokenType::Number => match next.lexeme.parse::<f32>() {
             Ok(f) => Ok((Some(Expression::Value(Box::new(Value::Float(f)))), i + 1)),
             Err(_) => Err(ParserError {
                 tokens: tokens,
                 errmsg: "not a valid floating point number".into(),
                 error_token_idx: i,
             }),
-        };
-    } else if next.t == TokenType::String {
-        return Ok((
+        },
+        TokenType::StringLiteral => Ok((
             Some(Expression::Value(Box::new(Value::String(
                 next.lexeme[1..next.lexeme.len() - 1].into(),
             )))),
             i + 1,
-        ));
-    } else if next.t == TokenType::Identifier {
-        return Ok((Some(Expression::Variable(next.lexeme.to_owned())), i + 1));
-    } else if let TokenType::Bracket(Bracket {
-        type_: bracket_type,
-        side: BracketSide::Open,
-    }) = next.t
-    {
-        let mut bracket_stack = BracketStack::new();
-        bracket_stack
-            .update(Bracket {
-                type_: bracket_type,
-                side: BracketSide::Open,
-            })
-            .unwrap();
-        let mut j = i + 1;
-        while j < tokens.len() && !bracket_stack.is_empty() {
-            let tt = &tokens[j].t;
-            if let TokenType::Bracket(b) = tt {
-                if let Err(update_errmsg) = bracket_stack.update(*b) {
-                    return Err(ParserError {
-                        tokens: tokens,
-                        errmsg: update_errmsg,
-                        error_token_idx: j,
-                    });
+        )),
+        TokenType::BoolLiteral => Ok((
+            Some(Expression::Value(Box::new(Value::Bool(
+                next.lexeme.to_lowercase() == "true",
+            )))),
+            i + 1,
+        )),
+        TokenType::Identifier => Ok((Some(Expression::Variable(next.lexeme.to_owned())), i + 1)),
+        TokenType::Bracket(Bracket {
+            type_: bracket_type,
+            side: BracketSide::Open,
+        }) => {
+            let mut bracket_stack = BracketStack::new();
+            bracket_stack
+                .update(Bracket {
+                    type_: bracket_type,
+                    side: BracketSide::Open,
+                })
+                .unwrap();
+            let mut j = i + 1;
+            while j < tokens.len() && !bracket_stack.is_empty() {
+                let tt = &tokens[j].t;
+                if let TokenType::Bracket(b) = tt {
+                    if let Err(update_errmsg) = bracket_stack.update(*b) {
+                        return Err(ParserError {
+                            tokens: tokens,
+                            errmsg: update_errmsg,
+                            error_token_idx: j,
+                        });
+                    }
                 }
+                j += 1;
             }
-            j += 1;
-        }
-        if !bracket_stack.is_empty() {
-            return Err(ParserError {
-                tokens: tokens,
-                errmsg: "unclosed bracket".into(),
-                error_token_idx: i,
-            });
-        }
+            if !bracket_stack.is_empty() {
+                return Err(ParserError {
+                    tokens: tokens,
+                    errmsg: "unclosed bracket".into(),
+                    error_token_idx: i,
+                });
+            }
 
-        let bracketed_tokens = &tokens[i + 1..j - 1];
-        if bracketed_tokens.len() == 0 {
-            return Err(ParserError {
-                tokens: tokens,
-                errmsg: "empty brackets".into(),
-                error_token_idx: i,
-            });
-        }
+            let bracketed_tokens = &tokens[i + 1..j - 1];
+            if bracketed_tokens.len() == 0 {
+                return Err(ParserError {
+                    tokens: tokens,
+                    errmsg: "empty brackets".into(),
+                    error_token_idx: i,
+                });
+            }
 
-        let bracketed_expr = match bracket_type {
-            BracketType::Round => {
-                let (expr, last_expr_token_offset_idx) =
-                    consume_expression(bracketed_tokens, 0, None)?;
-                if last_expr_token_offset_idx < bracketed_tokens.len() - 1 {
-                    return Err(ParserError {
-                        tokens: bracketed_tokens,
-                        errmsg: "round brackets must contain only one expression".into(),
-                        error_token_idx: last_expr_token_offset_idx,
-                    });
+            let bracketed_expr = match bracket_type {
+                BracketType::Round => {
+                    let (expr, last_expr_token_offset_idx) =
+                        consume_expression(bracketed_tokens, 0, None)?;
+                    if last_expr_token_offset_idx < bracketed_tokens.len() - 1 {
+                        return Err(ParserError {
+                            tokens: bracketed_tokens,
+                            errmsg: "round brackets must contain only one expression".into(),
+                            error_token_idx: last_expr_token_offset_idx,
+                        });
+                    }
+                    expr
                 }
-                expr
-            }
-            BracketType::Curly => parse(bracketed_tokens)?,
-        };
-        return Ok((Some(bracketed_expr), j));
-    } else {
-        return Ok((None, i));
+                BracketType::Curly => parse(bracketed_tokens)?,
+            };
+            return Ok((Some(bracketed_expr), j));
+        }
+        _ => Ok((None, i)),
     }
 }

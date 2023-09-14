@@ -7,6 +7,7 @@ pub mod functions;
 pub enum Value {
     Float(f32),
     String(String),
+    Bool(bool),
     Function(Function),
 }
 
@@ -15,6 +16,7 @@ impl Value {
         match self {
             Value::Float(_) => "float",
             Value::String(_) => "string",
+            Value::Bool(_) => "bool",
             Value::Function(f) => match f {
                 Function::Builtin(_) => "built-in function",
             },
@@ -27,6 +29,7 @@ impl Display for Value {
         match self {
             Value::Float(v) => write!(f, "{}", v),
             Value::String(s) => write!(f, "\"{}\"", s),
+            Value::Bool(v) => write!(f, "{}", if *v { "True" } else { "False" }),
             _ => write!(f, "{:?}", self),
         }
     }

@@ -18,7 +18,9 @@ pub enum TokenType {
     Caret,
     Equals,
     Identifier,
-    String,
+    StringLiteral,
+    BoolLiteral,
+    If,
 }
 
 #[derive(PartialEq, Eq, Clone)]
@@ -60,6 +62,7 @@ pub fn tokenize<'a>(code: &'a str) -> Result<Vec<Token<'a>>, errors::TokenizerEr
                     lexeme: &code[lookahead_idx - 1..lookahead_idx],
                 }),
                 CharMatch::Whitespace => {}
+                // CharMatch::CommentStart =>
                 CharMatch::Unexpected => {
                     return Err(errors::TokenizerError {
                         code: &code,
@@ -72,7 +75,7 @@ pub fn tokenize<'a>(code: &'a str) -> Result<Vec<Token<'a>>, errors::TokenizerEr
 
         // lookahead matching of "long" tokens with subiteration
         let maybe_long_token = match lookahead_char {
-            numeric_char if is_numeric_char(numeric_char) => {
+            numeric if is_numeric_char(numeric) => {
                 let end_idx: usize;
                 (end_idx, current_char) = iter_while_predicate(&mut code_chars, is_numeric_char)
                     .unwrap_or((code.len(), None));
@@ -81,16 +84,21 @@ pub fn tokenize<'a>(code: &'a str) -> Result<Vec<Token<'a>>, errors::TokenizerEr
                     lexeme: &code[lookahead_idx..end_idx],
                 })
             }
-            first_identifier_char if first_identifier_char.is_ascii_alphabetic() => {
+            letter if letter.is_ascii_alphabetic() => {
                 let end_idx: usize;
                 (end_idx, current_char) = iter_while_predicate(&mut code_chars, |ch| {
                     ch.is_ascii_alphanumeric() || ch == '_'
                 })
                 .unwrap_or((code.len(), None));
-                Some(Token {
-                    t: TokenType::Identifier,
-                    lexeme: &code[lookahead_idx..end_idx],
-                })
+                let lexeme = &code[lookahead_idx..end_idx];
+                if let Some(keyword) = match_keyword(lexeme) {
+                    Some(Token { t: keyword, lexeme })
+                } else {
+                    Some(Token {
+                        t: TokenType::Identifier,
+                        lexeme,
+                    })
+                }
             }
             '"' => {
                 let (end_idx, _) = iter_while_predicate(&mut code_chars, |ch| ch != '"').ok_or(
@@ -103,7 +111,7 @@ pub fn tokenize<'a>(code: &'a str) -> Result<Vec<Token<'a>>, errors::TokenizerEr
                 // code_chars.next(); // consuming closing quote
                 current_char = None;
                 Some(Token {
-                    t: TokenType::String,
+                    t: TokenType::StringLiteral,
                     lexeme: &code[lookahead_idx..=end_idx],
                 })
             }
@@ -171,6 +179,7 @@ fn is_numeric_char(ch: char) -> bool {
 enum CharMatch {
     Token(TokenType),
     Whitespace,
+    // CommentStart,
     Unexpected,
 }
 
@@ -199,8 +208,18 @@ fn match_char(ch: char) -> CharMatch {
             type_: BracketType::Curly,
             side: BracketSide::Close,
         })),
+        // '#' => CharMatch::CommentStart,
         ws if ws.is_whitespace() => CharMatch::Whitespace,
         _ => CharMatch::Unexpected,
+    }
+}
+
+fn match_keyword(lexeme: &str) -> Option<TokenType> {
+    match lexeme {
+        "if" => Some(TokenType::If),
+        any_true if any_true.to_lowercase() == "true" => Some(TokenType::BoolLiteral),
+        any_false if any_false.to_lowercase() == "false" => Some(TokenType::BoolLiteral),
+        _ => None,
     }
 }
 
@@ -217,7 +236,7 @@ pub fn untokenize(tokens: &[Token], minified: bool) -> String {
     let newline = if minified { " " } else { "\n" };
 
     for (token_l, token_r) in token_iter_1.zip(token_iter_2) {
-        res.push_str(token_l.lexeme);
+        res.push_str(&format_token(token_l));
         let delimiter = match (token_l.t, token_r.t) {
             (TokenType::Caret, _) => "",
             (_, TokenType::Caret) => "",
@@ -272,8 +291,15 @@ pub fn untokenize(tokens: &[Token], minified: bool) -> String {
             res.push_str(&" ".repeat(current_indent * indent_spaces))
         }
     }
-    res.push_str(tokens[tokens.len() - 1].lexeme);
+    res.push_str(&format_token(&tokens[tokens.len() - 1]));
     return res;
+}
+
+fn format_token(token: &Token) -> String {
+    match token.t {
+        TokenType::BoolLiteral => token.lexeme.to_lowercase(),
+        _ => token.lexeme.into(),
+    }
 }
 
 #[cfg(test)]

@@ -5,15 +5,6 @@ use crate::parser::{BinaryOp, Expression, UnaryOp};
 use crate::values::functions::builtin;
 use crate::values::Value;
 
-// pub fn eval(expressions: &[Expression]) -> Result<Vec<Box<Value>>, RuntimeError> {
-//     let mut results: Vec<Box<Value>> = Vec::new();
-//     let mut variables: HashMap<String, Box<Value>> = HashMap::new();
-//     for expr in expressions {
-//         results.push(eval_expression(expr, &mut variables)?);
-//     }
-//     return Ok(results);
-// }
-
 macro_rules! apply_bin {
     ( $func:expr, $left:expr, $right:expr, $op_name:expr ) => {{
         let maybe_res = $func(&$left, &$right);
@@ -124,6 +115,7 @@ fn add(a: &Value, b: &Value) -> Option<Value> {
             res.push_str(s2);
             Some(Value::String(res))
         }
+        (Value::Bool(b1), Value::Bool(b2)) => Some(Value::Bool(*b1 || *b2)),
         _ => None,
     }
 }
@@ -136,6 +128,7 @@ fn sub(a: &Value, b: &Value) -> Option<Value> {
 fn mul(a: &Value, b: &Value) -> Option<Value> {
     match (a, b) {
         (Value::Float(f1), Value::Float(f2)) => Some(Value::Float(f1 * f2)),
+        (Value::Bool(b1), Value::Bool(b2)) => Some(Value::Bool(*b1 && *b2)),
         _ => None,
     }
 }
@@ -155,6 +148,7 @@ fn pow(a: &Value, b: &Value) -> Option<Value> {
 fn neg(v: &Value) -> Option<Value> {
     match v {
         Value::Float(v) => Some(Value::Float(-v)),
+        Value::Bool(b) => Some(Value::Bool(!b)),
         _ => None,
     }
 }
@@ -186,6 +180,16 @@ mod tests {
     #[case("a = exp; a(0)", Value::Float(1.0))]
     #[case("{1} + {2}", Value::Float(3.0))]
     #[case("{1} + {2}", Value::Float(3.0))]
+    #[case("True", Value::Bool(true))]
+    #[case("tRuE", Value::Bool(true))]
+    #[case("true + false", Value::Bool(true))]
+    #[case("false + true", Value::Bool(true))]
+    #[case("false + false", Value::Bool(false))]
+    #[case("true + true", Value::Bool(true))]
+    #[case("true * false", Value::Bool(false))]
+    #[case("true * true", Value::Bool(true))]
+    #[case("false * false", Value::Bool(false))]
+    #[case("-false", Value::Bool(true))]
     fn test_runtime_basic(#[case] code: &str, #[case] expected_result: Value) {
         let code_ = String::from(code);
         let tokens = tokenize(&code_).unwrap();
