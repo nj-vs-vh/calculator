@@ -18,18 +18,26 @@ impl Function {
 fn log(arg: &Value) -> Result<Value, String> {
     match arg {
         Value::Float(v) => Ok(Value::Float(v.ln())),
-        _ => Err("log is only defined for float arg".into()),
+        Value::Int(v) => log(&Value::Float(*v as f32)),
+        a => not_defined_for_arg("log", a),
     }
 }
 fn exp(arg: &Value) -> Result<Value, String> {
     match arg {
         Value::Float(v) => Ok(Value::Float(v.exp())),
-        _ => Err("exp is only defined for float arg".into()),
+        Value::Int(v) => exp(&Value::Float(*v as f32)),
+        a => not_defined_for_arg("exp", a),
     }
 }
 fn print(arg: &Value) -> Result<Value, String> {
     println!("{}", arg);
     Ok(Value::Float(0.0))
+}
+fn length(arg: &Value) -> Result<Value, String> {
+    match arg {
+        Value::String(s) => Ok(Value::Int(s.len() as i32)),
+        a => not_defined_for_arg("length", a),
+    }
 }
 
 pub fn builtin(name: &str) -> Option<Function> {
@@ -37,6 +45,15 @@ pub fn builtin(name: &str) -> Option<Function> {
         "log" => Some(Function::Builtin(log)),
         "exp" => Some(Function::Builtin(exp)),
         "print" => Some(Function::Builtin(print)),
+        "length" => Some(Function::Builtin(length)),
         _ => None,
     }
+}
+
+fn not_defined_for_arg(func_name: &str, arg: &Value) -> Result<Value, String> {
+    Err(format!(
+        "{} is not defined for arg of type \"{}\"",
+        func_name,
+        arg.type_name()
+    ))
 }

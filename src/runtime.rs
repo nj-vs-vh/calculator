@@ -110,6 +110,9 @@ pub fn eval(
 fn add(a: &Value, b: &Value) -> Option<Value> {
     match (a, b) {
         (Value::Float(f1), Value::Float(f2)) => Some(Value::Float(f1 + f2)),
+        (Value::Int(i1), Value::Float(f2)) => Some(Value::Float(*i1 as f32 + *f2)),
+        (Value::Float(_), Value::Int(_)) => add(b, a),
+        (Value::Int(i1), Value::Int(i2)) => Some(Value::Int(i1 + i2)),
         (Value::String(s1), Value::String(s2)) => {
             let mut res = s1.clone();
             res.push_str(s2);
@@ -122,12 +125,18 @@ fn add(a: &Value, b: &Value) -> Option<Value> {
 fn sub(a: &Value, b: &Value) -> Option<Value> {
     match (a, b) {
         (Value::Float(f1), Value::Float(f2)) => Some(Value::Float(f1 - f2)),
+        (Value::Int(i1), Value::Float(f2)) => Some(Value::Float(*i1 as f32 - *f2)),
+        (Value::Float(f1), Value::Int(i2)) => Some(Value::Float(*f1 - *i2 as f32)),
+        (Value::Int(i1), Value::Int(i2)) => Some(Value::Int(i1 - i2)),
         _ => None,
     }
 }
 fn mul(a: &Value, b: &Value) -> Option<Value> {
     match (a, b) {
         (Value::Float(f1), Value::Float(f2)) => Some(Value::Float(f1 * f2)),
+        (Value::Int(i1), Value::Float(f2)) => Some(Value::Float(*i1 as f32 * *f2)),
+        (Value::Float(_), Value::Int(_)) => mul(b, a),
+        (Value::Int(i1), Value::Int(i2)) => Some(Value::Int(i1 * i2)),
         (Value::Bool(b1), Value::Bool(b2)) => Some(Value::Bool(*b1 && *b2)),
         _ => None,
     }
@@ -135,12 +144,23 @@ fn mul(a: &Value, b: &Value) -> Option<Value> {
 fn div(a: &Value, b: &Value) -> Option<Value> {
     match (a, b) {
         (Value::Float(f1), Value::Float(f2)) => Some(Value::Float(f1 / f2)),
+        (Value::Int(i1), Value::Float(f2)) => Some(Value::Float(*i1 as f32 / *f2)),
+        (Value::Float(f1), Value::Int(i2)) => Some(Value::Float(*f1 / *i2 as f32)),
+        (Value::Int(i1), Value::Int(i2)) => Some(Value::Int(i1 / i2)),
         _ => None,
     }
 }
 fn pow(a: &Value, b: &Value) -> Option<Value> {
     match (a, b) {
         (Value::Float(f1), Value::Float(f2)) => Some(Value::Float(f1.powf(*f2))),
+        (Value::Int(i1), Value::Float(f2)) => Some(Value::Float((*i1 as f32).powf(*f2))),
+        (Value::Float(f1), Value::Int(i2)) => Some(Value::Float(f1.powi(*i2))),
+        (Value::Int(i1), Value::Int(i2)) => Some(if *i2 > 0 {
+            Value::Int(i1.pow(*i2 as u32))
+        } else {
+            Value::Float((*i1 as f32).powi(*i2))
+        }),
+        (Value::Bool(b1), Value::Bool(b2)) => Some(Value::Bool(b1 ^ b2)),
         _ => None,
     }
 }

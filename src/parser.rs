@@ -180,14 +180,31 @@ fn consume_operand<'a>(
     let next = &tokens[i];
     match next.t {
         TokenType::ExprEnd => Ok((None, i)),
-        TokenType::Number => match next.lexeme.parse::<f32>() {
-            Ok(f) => Ok((Some(Expression::Value(Box::new(Value::Float(f)))), i + 1)),
-            Err(_) => Err(ParserError {
-                tokens: tokens,
-                errmsg: "not a valid floating point number".into(),
-                error_token_idx: i,
-            }),
-        },
+        TokenType::Number => {
+            let includes_dot = next.lexeme.chars().find(|&ch| ch == '.').is_some();
+            let value = if includes_dot {
+                if let Ok(f) = next.lexeme.parse::<f32>() {
+                    Value::Float(f)
+                } else {
+                    return Err(ParserError {
+                        tokens: tokens,
+                        errmsg: "not a valid floating point number".into(),
+                        error_token_idx: i,
+                    });
+                }
+            } else {
+                if let Ok(i) = next.lexeme.parse::<i32>() {
+                    Value::Int(i)
+                } else {
+                    return Err(ParserError {
+                        tokens: tokens,
+                        errmsg: "not a valid integer".into(),
+                        error_token_idx: i,
+                    });
+                }
+            };
+            return Ok((Some(Expression::Value(Box::new(value))), i + 1));
+        }
         TokenType::StringLiteral => Ok((
             Some(Expression::Value(Box::new(Value::String(
                 next.lexeme[1..next.lexeme.len() - 1].into(),
