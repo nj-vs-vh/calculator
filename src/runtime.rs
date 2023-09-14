@@ -163,6 +163,9 @@ mod tests {
     #[case("a = 5; b = 6; d = c = a + b; d", Value::Float(11.0))]
     #[case("2 + -3", Value::Float(-1.0))]
     #[case("-3 ^ 4", Value::Float(-81.0))]
+    #[case("log(1)", Value::Float(0.0))]
+    #[case("exp(0)", Value::Float(1.0))]
+    #[case("a = exp; a(0)", Value::Float(1.0))]
     fn test_runtime_basic(#[case] code: &str, #[case] expected_result: Value) {
         let code_ = String::from(code);
         let tokens = tokenize(&code_).unwrap();
