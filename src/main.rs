@@ -11,7 +11,7 @@ mod tokenizer;
 mod values;
 
 fn main() {
-    let code = String::from("1 + 1 + (3 * 5)^2 * 10 + 6;");
+    let code = String::from(" a= 1 + 1 + (3 * 5)^2 * 10 + 6; b = a + 5; b = a + b; c = d = a");
     // let code = String::from("1 + 2 + (a ^ b) - log(3+ 5);\n\n3 + 5;\n 4 + f - foo(bar) + 4 (3)");
 
     let tokenizer_result = tokenize(&code);
