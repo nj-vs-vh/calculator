@@ -1,6 +1,7 @@
 use crate::{
     errors::ParserError,
     tokenizer::{Token, TokenType},
+    values::Value,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -16,9 +17,9 @@ pub enum BinaryOp {
 
 #[derive(Debug, Clone)]
 pub struct BinaryOperation {
-    op: BinaryOp,
-    left: Box<Expression>,
-    right: Box<Expression>,
+    pub op: BinaryOp,
+    pub left: Box<Expression>,
+    pub right: Box<Expression>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -28,13 +29,13 @@ pub enum UnaryOp {
 
 #[derive(Debug, Clone)]
 pub struct UnaryOperation {
-    op: UnaryOp,
-    operand: Box<Expression>,
+    pub op: UnaryOp,
+    pub operand: Box<Expression>,
 }
 
 #[derive(Debug, Clone)]
 pub enum Expression {
-    Value(f32), // value modelling for data types TBD
+    Value(Box<Value>),
     Variable(String),
     Bin(BinaryOperation),
     Un(UnaryOperation),
@@ -195,19 +196,25 @@ fn consume_operand<'a>(
     if i > tokens.len() {
         return Ok((None, i));
     }
-    let first = &tokens[i];
-    if first.t == TokenType::Number {
-        return match first.lexeme.parse::<f32>() {
-            Ok(f) => Ok((Some(Expression::Value(f)), i + 1)),
+    let next = &tokens[i];
+    if next.t == TokenType::ExprEnd {
+        return Err(ParserError {
+            tokens: tokens,
+            errmsg: "expected operand here, found expression end".into(),
+            error_token_idx: i,
+        });
+    } else if next.t == TokenType::Number {
+        return match next.lexeme.parse::<f32>() {
+            Ok(f) => Ok((Some(Expression::Value(Box::new(Value::Float(f)))), i + 1)),
             Err(_) => Err(ParserError {
                 tokens: tokens,
                 errmsg: "not a valid floating point number".into(),
                 error_token_idx: i,
             }),
         };
-    } else if first.t == TokenType::Identifier {
-        return Ok((Some(Expression::Variable(first.lexeme.to_owned())), i + 1));
-    } else if first.t == TokenType::RoundBracketOpen {
+    } else if next.t == TokenType::Identifier {
+        return Ok((Some(Expression::Variable(next.lexeme.to_owned())), i + 1));
+    } else if next.t == TokenType::RoundBracketOpen {
         let mut open_bracket_count = 1;
         let mut j = i + 1;
         while j < tokens.len() && open_bracket_count > 0 {

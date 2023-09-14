@@ -128,3 +128,16 @@ impl Display for ParserError<'_> {
         )
     }
 }
+
+#[derive(Debug)]
+pub struct RuntimeError {
+    pub errmsg: String,
+}
+
+impl Error for RuntimeError {}
+
+impl Display for RuntimeError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Runtime error: {}", self.errmsg)
+    }
+}
