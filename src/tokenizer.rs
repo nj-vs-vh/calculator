@@ -83,9 +83,10 @@ pub fn tokenize<'a>(code: &'a str) -> Result<Vec<Token<'a>>, errors::TokenizerEr
             }
             first_identifier_char if first_identifier_char.is_ascii_alphabetic() => {
                 let end_idx: usize;
-                (end_idx, current_char) =
-                    iter_while_predicate(&mut code_chars, |ch| ch.is_ascii_alphanumeric())
-                        .unwrap_or((code.len(), None));
+                (end_idx, current_char) = iter_while_predicate(&mut code_chars, |ch| {
+                    ch.is_ascii_alphanumeric() || ch == '_'
+                })
+                .unwrap_or((code.len(), None));
                 Some(Token {
                     t: TokenType::Identifier,
                     lexeme: &code[lookahead_idx..end_idx],
@@ -99,7 +100,8 @@ pub fn tokenize<'a>(code: &'a str) -> Result<Vec<Token<'a>>, errors::TokenizerEr
                         error_char_idx: code.len() - 1,
                     },
                 )?;
-                code_chars.next(); // consuming closing quote
+                // code_chars.next(); // consuming closing quote
+                current_char = None;
                 Some(Token {
                     t: TokenType::String,
                     lexeme: &code[lookahead_idx..=end_idx],
@@ -202,7 +204,7 @@ fn match_char(ch: char) -> CharMatch {
     }
 }
 
-pub fn untokenize(tokens: &[Token]) -> String {
+pub fn untokenize(tokens: &[Token], minified: bool) -> String {
     let mut res = String::new();
 
     let token_iter_1 = tokens.iter();
@@ -210,7 +212,9 @@ pub fn untokenize(tokens: &[Token]) -> String {
     token_iter_2.next();
 
     let mut current_indent: usize = 0;
-    const INDENT_SPACES: usize = 2;
+    let indent_spaces: usize = if minified { 0 } else { 2 };
+
+    let newline = if minified { " " } else { "\n" };
 
     for (token_l, token_r) in token_iter_1.zip(token_iter_2) {
         res.push_str(token_l.lexeme);
@@ -218,6 +222,7 @@ pub fn untokenize(tokens: &[Token]) -> String {
             (TokenType::Caret, _) => "",
             (_, TokenType::Caret) => "",
             (
+                // function calls like log(10)
                 TokenType::Identifier,
                 TokenType::Bracket(Bracket {
                     type_: BracketType::Round,
@@ -225,7 +230,7 @@ pub fn untokenize(tokens: &[Token]) -> String {
                 }),
             ) => "",
             (_, TokenType::ExprEnd) => "",
-            (TokenType::ExprEnd, _) => "\n",
+            (TokenType::ExprEnd, _) => newline.into(),
             (
                 TokenType::Bracket(Bracket {
                     type_: BracketType::Curly,
@@ -234,7 +239,7 @@ pub fn untokenize(tokens: &[Token]) -> String {
                 _,
             ) => {
                 current_indent += 1;
-                "\n"
+                newline.into()
             }
             (
                 _,
@@ -243,16 +248,28 @@ pub fn untokenize(tokens: &[Token]) -> String {
                     side: BracketSide::Close,
                 }),
             ) => {
-                current_indent -= 1;
-                "\n"
+                current_indent = current_indent.saturating_sub(1);
+                newline.into()
             }
-            (TokenType::Bracket(b), _) if b.side == BracketSide::Open => "",
-            (_, TokenType::Bracket(b)) if b.side == BracketSide::Close => "",
+            (
+                TokenType::Bracket(Bracket {
+                    type_: _,
+                    side: BracketSide::Open,
+                }),
+                _,
+            ) => "",
+            (
+                _,
+                TokenType::Bracket(Bracket {
+                    type_: _,
+                    side: BracketSide::Close,
+                }),
+            ) => "",
             _ => " ",
         };
         res.push_str(delimiter);
         if delimiter.ends_with("\n") {
-            res.push_str(&" ".repeat(current_indent * INDENT_SPACES))
+            res.push_str(&" ".repeat(current_indent * indent_spaces))
         }
     }
     res.push_str(tokens[tokens.len() - 1].lexeme);

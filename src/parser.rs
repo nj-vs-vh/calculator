@@ -4,6 +4,7 @@ use crate::{
     tokenizer::{Token, TokenType},
     values::Value,
 };
+use std::cmp::min;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BinaryOp {
@@ -85,8 +86,8 @@ pub fn parse<'a>(tokens: &'a [Token<'a>]) -> Result<Expression, ParserError<'a>>
     let mut i = 0;
     while i < tokens.len() {
         let expr: Expression;
-        (expr, i) = consume_expression(tokens, i, None, true)?;
-        i += 1; // skipping expr end
+        (expr, i) = consume_expression(tokens, i, None)?;
+        i += 1;
         exprs.push(expr);
     }
     return Ok(Expression::Scope(exprs));
@@ -96,7 +97,6 @@ fn consume_expression<'a>(
     tokens: &'a [Token<'a>],
     i: usize,
     prev_op: Option<Op>,
-    allow_unterminated: bool,
 ) -> Result<(Expression, usize), ParserError<'a>> {
     let mut result: Option<Expression> = None;
     let mut left: Option<Expression>;
@@ -105,25 +105,12 @@ fn consume_expression<'a>(
         (left, i) = if *&result.is_none() {
             consume_operand(tokens, i)?
         } else {
-            (result.clone(), i)
+            (result, i)
         };
 
-        if i >= tokens.len() {
-            if allow_unterminated {
-                if let Some(left) = left {
-                    return Ok((left, tokens.len()));
-                }
-            }
-            return Err(ParserError {
-                tokens: tokens,
-                errmsg: "unterminated expression".into(),
-                error_token_idx: tokens.len() - 1,
-            });
-        }
-
         if let Some(left) = left {
-            if tokens[i].t == TokenType::ExprEnd {
-                return Ok((left, i));
+            if i >= tokens.len() || tokens[i].t == TokenType::ExprEnd {
+                return Ok((left, min(i, tokens.len())));
             }
             let next_binary_op = match tokens[i].t {
                 TokenType::Plus => BinaryOp::Add,
@@ -141,7 +128,7 @@ fn consume_expression<'a>(
                         tokens: tokens,
                         errmsg: "binary operator expected".into(),
                         error_token_idx: i,
-                    })
+                    });
                 }
             };
             let next_op_token_count: usize = if next_binary_op == BinaryOp::FunctionCall {
@@ -156,12 +143,7 @@ fn consume_expression<'a>(
                 }
             }
             let right: Expression;
-            (right, i) = consume_expression(
-                tokens,
-                i + next_op_token_count,
-                Some(next_op),
-                allow_unterminated,
-            )?;
+            (right, i) = consume_expression(tokens, i + next_op_token_count, Some(next_op))?;
             result = Some(Expression::Bin(BinaryOperation {
                 op: next_binary_op,
                 left: Box::new(left),
@@ -179,12 +161,7 @@ fn consume_expression<'a>(
                 }
             };
             let operand: Expression;
-            (operand, i) = consume_expression(
-                tokens,
-                i + 1,
-                Some(Op::Unary(next_unary_op)),
-                allow_unterminated,
-            )?;
+            (operand, i) = consume_expression(tokens, i + 1, Some(Op::Unary(next_unary_op)))?;
             result = Some(Expression::Un(UnaryOperation {
                 op: next_unary_op,
                 operand: Box::new(operand),
@@ -202,11 +179,7 @@ fn consume_operand<'a>(
     }
     let next = &tokens[i];
     if next.t == TokenType::ExprEnd {
-        return Err(ParserError {
-            tokens: tokens,
-            errmsg: "expected operand here, found expression end".into(),
-            error_token_idx: i,
-        });
+        return Ok((None, i));
     } else if next.t == TokenType::Number {
         return match next.lexeme.parse::<f32>() {
             Ok(f) => Ok((Some(Expression::Value(Box::new(Value::Float(f)))), i + 1)),
@@ -240,13 +213,6 @@ fn consume_operand<'a>(
         let mut j = i + 1;
         while j < tokens.len() && !bracket_stack.is_empty() {
             let tt = &tokens[j].t;
-            if bracket_type == BracketType::Round && *tt == TokenType::ExprEnd {
-                return Err(ParserError {
-                    tokens: tokens,
-                    errmsg: "expression terminated inside round brackets".into(),
-                    error_token_idx: j,
-                });
-            }
             if let TokenType::Bracket(b) = tt {
                 if let Err(update_errmsg) = bracket_stack.update(*b) {
                     return Err(ParserError {
@@ -276,7 +242,18 @@ fn consume_operand<'a>(
         }
 
         let bracketed_expr = match bracket_type {
-            BracketType::Round => consume_expression(bracketed_tokens, 0, None, true)?.0,
+            BracketType::Round => {
+                let (expr, last_expr_token_offset_idx) =
+                    consume_expression(bracketed_tokens, 0, None)?;
+                if last_expr_token_offset_idx < bracketed_tokens.len() - 1 {
+                    return Err(ParserError {
+                        tokens: bracketed_tokens,
+                        errmsg: "round brackets must contain only one expression".into(),
+                        error_token_idx: last_expr_token_offset_idx,
+                    });
+                }
+                expr
+            }
             BracketType::Curly => parse(bracketed_tokens)?,
         };
         return Ok((Some(bracketed_expr), j));

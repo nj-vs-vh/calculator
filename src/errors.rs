@@ -111,11 +111,13 @@ impl Display for ParserError<'_> {
         let code_context_tokens: Vec<Token<'_>> = self.tokens
             [self.error_token_idx - start_offset..=self.error_token_idx + end_offset]
             .into();
-        let code_context_line = untokenize(&code_context_tokens);
+        let code_context_line = untokenize(&code_context_tokens, true);
 
-        let code_context_pre_err =
-            untokenize(&self.tokens[self.error_token_idx - start_offset..=self.error_token_idx]);
-        let code_context_err = untokenize(&vec![self.tokens[self.error_token_idx].clone()]);
+        let code_context_pre_err = untokenize(
+            &self.tokens[self.error_token_idx - start_offset..=self.error_token_idx],
+            true,
+        );
+        let code_context_err = untokenize(&vec![self.tokens[self.error_token_idx].clone()], true);
         let mut pointing_arrow_line =
             " ".repeat(code_context_pre_err.len() - code_context_err.len());
 

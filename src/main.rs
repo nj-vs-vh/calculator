@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, fs, path::PathBuf};
 
 use crate::{
     parser::parse,
@@ -13,8 +13,31 @@ mod runtime;
 mod tokenizer;
 mod values;
 
+use clap::{Parser, Subcommand};
+
+#[derive(Parser)]
+#[command(name = "calculator")]
+struct Cli {
+    #[command(subcommand)]
+    command: Option<Commands>,
+
+    #[arg(short, long, action = clap::ArgAction::Count)]
+    verbose: u8,
+
+    filename: PathBuf,
+}
+
+#[derive(Subcommand)]
+enum Commands {
+    Fmt,
+}
+
 fn main() {
-    let code = "a = 1; { a = 2; b = { c = log(3); exp(c)}; a + b } + { a + 5 };";
+    let args = Cli::parse();
+
+    let code = fs::read_to_string(&args.filename).expect("Failed to read input file");
+
+    // let code = "a = 1; { a = 2; b = { c = log(3); exp(c)}; a + b } + { a + 5 };";
     // let code = "log(1); exp(3); a = exp; a(3)";
     // let code = "\"hello world\" + \"!!!\";";
     // let code = " a= 1 + 1 + (3 * 5)^2 * 10 + 6; b = a + 5; b = a + b; c = d = a";
@@ -28,9 +51,15 @@ fn main() {
         }
         Ok(tokens) => tokens,
     };
+    if args.verbose > 0 {
+        println!("Tokens:\n{:?}", &tokens);
+    }
 
-    println!("{:?}", tokens);
-    println!("{}", untokenize(&tokens));
+    if let Some(Commands::Fmt) = args.command {
+        let formatted = untokenize(&tokens, false);
+        fs::write(&args.filename, formatted).expect("Failed to write formatted code to file");
+        return;
+    }
 
     let parser_result = parse(&tokens);
     let expressions = match parser_result {
@@ -40,10 +69,12 @@ fn main() {
         }
         Ok(exprs) => exprs,
     };
-    println!("{:?}", expressions);
+    if args.verbose > 0 {
+        println!("AST:\n{:?}", expressions);
+    }
 
     let eval_result = eval(&expressions, &mut HashMap::new());
-    let results = match eval_result {
+    let result = match eval_result {
         Err(e) => {
             println!("{}", e);
             return;
@@ -51,5 +82,7 @@ fn main() {
         Ok(vs) => vs,
     };
 
-    println!("{:?}", results);
+    if args.verbose > 0 {
+        println!("Resulting value:\n{:?}", result);
+    }
 }

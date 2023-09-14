@@ -27,11 +27,16 @@ fn exp(arg: &Value) -> Result<Value, String> {
         _ => Err("exp is only defined for float arg".into()),
     }
 }
+fn print(arg: &Value) -> Result<Value, String> {
+    println!("{}", arg);
+    Ok(Value::Float(0.0))
+}
 
 pub fn builtin(name: &str) -> Option<Function> {
     match name {
         "log" => Some(Function::Builtin(log)),
         "exp" => Some(Function::Builtin(exp)),
+        "print" => Some(Function::Builtin(print)),
         _ => None,
     }
 }
