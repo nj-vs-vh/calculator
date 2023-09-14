@@ -83,6 +83,9 @@ pub fn eval(
                 BinaryOp::Mul => apply_bin!(mul, left_value, right_value, "multiplication"),
                 BinaryOp::Div => apply_bin!(div, left_value, right_value, "division"),
                 BinaryOp::Pow => apply_bin!(pow, left_value, right_value, "power"),
+                BinaryOp::IsEq => apply_bin!(eq, left_value, right_value, "equality"),
+                BinaryOp::IsLt => apply_bin!(lt, left_value, right_value, "less-than"),
+                BinaryOp::IsGt => apply_bin!(gt, left_value, right_value, "greater-than"),
                 BinaryOp::FunctionCall => {
                     if let Value::Function(func) = left_value.clone().as_ref() {
                         match func.call(&right_value) {
@@ -146,7 +149,7 @@ fn div(a: &Value, b: &Value) -> Option<Value> {
         (Value::Float(f1), Value::Float(f2)) => Some(Value::Float(f1 / f2)),
         (Value::Int(i1), Value::Float(f2)) => Some(Value::Float(*i1 as f32 / *f2)),
         (Value::Float(f1), Value::Int(i2)) => Some(Value::Float(*f1 / *i2 as f32)),
-        (Value::Int(i1), Value::Int(i2)) => Some(Value::Int(i1 / i2)),
+        (Value::Int(i1), Value::Int(i2)) => Some(Value::Float((*i1 as f32) / (*i2 as f32))),
         _ => None,
     }
 }
@@ -164,10 +167,36 @@ fn pow(a: &Value, b: &Value) -> Option<Value> {
         _ => None,
     }
 }
+fn lt(a: &Value, b: &Value) -> Option<Value> {
+    match (a, b) {
+        (Value::Float(f1), Value::Float(f2)) => Some(Value::Bool(f1 < f2)),
+        (Value::Int(i1), Value::Float(f2)) => Some(Value::Bool((*i1 as f32) < *f2)),
+        (Value::Float(f1), Value::Int(i2)) => Some(Value::Bool(*f1 < *i2 as f32)),
+        (Value::Int(i1), Value::Int(i2)) => Some(Value::Bool(i1 < i2)),
+        _ => None,
+    }
+}
+fn gt(a: &Value, b: &Value) -> Option<Value> {
+    match (a, b) {
+        (Value::Float(f1), Value::Float(f2)) => Some(Value::Bool(f1 > f2)),
+        (Value::Int(i1), Value::Float(f2)) => Some(Value::Bool((*i1 as f32) > *f2)),
+        (Value::Float(f1), Value::Int(i2)) => Some(Value::Bool(*f1 > *i2 as f32)),
+        (Value::Int(i1), Value::Int(i2)) => Some(Value::Bool(i1 > i2)),
+        _ => None,
+    }
+}
+fn eq(a: &Value, b: &Value) -> Option<Value> {
+    match (a, b) {
+        (Value::Int(i1), Value::Float(f2)) => Some(Value::Bool((*i1 as f32) == *f2)),
+        (Value::Float(f1), Value::Int(i2)) => Some(Value::Bool(*f1 == *i2 as f32)),
+        (a, b) => Some(Value::Bool(a == b)),
+    }
+}
 
 fn neg(v: &Value) -> Option<Value> {
     match v {
         Value::Float(v) => Some(Value::Float(-v)),
+        Value::Int(v) => Some(Value::Int(-v)),
         Value::Bool(b) => Some(Value::Bool(!b)),
         _ => None,
     }
@@ -181,25 +210,25 @@ mod tests {
     use rstest::rstest;
 
     #[rstest]
-    #[case("1", Value::Float(1.0))]
-    #[case("1;", Value::Float(1.0))]
-    #[case("(1);", Value::Float(1.0))]
-    #[case("(((1)))", Value::Float(1.0))]
-    #[case("1 + 1;", Value::Float(2.0))]
-    #[case("1 + 2 * 3 ^ 2 * 5 + 10;", Value::Float(101.0))]
+    #[case("1", Value::Int(1))]
+    #[case("1;", Value::Int(1))]
+    #[case("(1);", Value::Int(1))]
+    #[case("(((1)))", Value::Int(1))]
+    #[case("1 + 1;", Value::Int(2))]
+    #[case("1 + 2 * 3 ^ 2 * 5 + 10;", Value::Int(101))]
+    #[case("1 + (2 * (3 ^ 2) * 5) + 10;", Value::Int(101))]
     #[case("10 / 5 / 2", Value::Float(1.0))]
     #[case("10 * 5 / 2", Value::Float(25.0))]
     #[case("5 / 5 * 2", Value::Float(2.0))]
-    #[case("1 + (2 * (3 ^ 2) * 5) + 10;", Value::Float(101.0))]
-    #[case("a = 5; b = 6; a + b", Value::Float(11.0))]
-    #[case("a = 5; b = 6; d = c = a + b; d", Value::Float(11.0))]
-    #[case("2 + -3", Value::Float(-1.0))]
-    #[case("-3 ^ 4", Value::Float(-81.0))]
+    #[case("a = 5; b = 6; a + b", Value::Int(11))]
+    #[case("a = 5; b = 6; d = c = a + b; d", Value::Int(11))]
+    #[case("2 + -3", Value::Int(-1))]
+    #[case("-3 ^ 4", Value::Int(-81))]
     #[case("log(1)", Value::Float(0.0))]
     #[case("exp(0)", Value::Float(1.0))]
     #[case("a = exp; a(0)", Value::Float(1.0))]
-    #[case("{1} + {2}", Value::Float(3.0))]
-    #[case("{1} + {2}", Value::Float(3.0))]
+    #[case("{1} + {2}", Value::Int(3))]
+    #[case("{1} + {2}", Value::Int(3))]
     #[case("True", Value::Bool(true))]
     #[case("tRuE", Value::Bool(true))]
     #[case("true + false", Value::Bool(true))]
@@ -210,6 +239,17 @@ mod tests {
     #[case("true * true", Value::Bool(true))]
     #[case("false * false", Value::Bool(false))]
     #[case("-false", Value::Bool(true))]
+    #[case("1 == 1", Value::Bool(true))]
+    #[case("- 1 == 1", Value::Bool(false))]
+    #[case("-(1 == 2)", Value::Bool(true))]
+    #[case("1 == \"foo\"", Value::Bool(false))]
+    #[case("\"foo\" == \"foo\"", Value::Bool(true))]
+    #[case("1 < 2", Value::Bool(true))]
+    #[case("2 > 1", Value::Bool(true))]
+    #[case("2 > 1 == true", Value::Bool(true))]
+    #[case("true == 2 > 1", Value::Bool(true))]
+    #[case("2.5 > 1", Value::Bool(true))]
+    #[case("2.5 > 1.5", Value::Bool(true))]
     fn test_runtime_basic(#[case] code: &str, #[case] expected_result: Value) {
         let code_ = String::from(code);
         let tokens = tokenize(&code_).unwrap();

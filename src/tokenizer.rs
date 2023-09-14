@@ -21,6 +21,9 @@ pub enum TokenType {
     StringLiteral,
     BoolLiteral,
     If,
+    LeftAngle,
+    RightAngle,
+    DoubleEquals,
 }
 
 #[derive(PartialEq, Eq, Clone)]
@@ -99,6 +102,27 @@ pub fn tokenize<'a>(code: &'a str) -> Result<Vec<Token<'a>>, errors::TokenizerEr
                         lexeme,
                     })
                 }
+            }
+            '=' => {
+                let end_idx: usize;
+                (end_idx, current_char) = iter_while_predicate(&mut code_chars, |ch| ch == '=')
+                    .unwrap_or((code.len(), None));
+                let lexeme = &code[lookahead_idx..end_idx];
+                let token_type = match lexeme.len() {
+                    1 => TokenType::Equals,
+                    2 => TokenType::DoubleEquals,
+                    _ => {
+                        return Err(TokenizerError {
+                            code: code,
+                            errmsg: "too much equal signs".into(),
+                            error_char_idx: end_idx,
+                        })
+                    }
+                };
+                Some(Token {
+                    t: token_type,
+                    lexeme,
+                })
             }
             '"' => {
                 let (end_idx, _) = iter_while_predicate(&mut code_chars, |ch| ch != '"').ok_or(
@@ -200,6 +224,8 @@ fn match_char(ch: char) -> CharMatch {
         ';' => CharMatch::Token(TokenType::ExprEnd),
         '=' => CharMatch::Token(TokenType::Equals),
         '^' => CharMatch::Token(TokenType::Caret),
+        '<' => CharMatch::Token(TokenType::LeftAngle),
+        '>' => CharMatch::Token(TokenType::RightAngle),
         '{' => CharMatch::Token(TokenType::Bracket(Bracket {
             type_: BracketType::Curly,
             side: BracketSide::Open,

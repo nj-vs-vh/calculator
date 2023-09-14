@@ -14,6 +14,9 @@ pub enum BinaryOp {
     Div,
     Pow,
     Assign,
+    IsEq,
+    IsGt,
+    IsLt,
     FunctionCall,
 }
 
@@ -40,8 +43,11 @@ enum Op {
     Binary(BinaryOp),
 }
 
-const ORDER_OF_PRECEDENCE: [Op; 8] = [
+const ORDER_OF_PRECEDENCE: [Op; 11] = [
     Op::Binary(BinaryOp::Assign),
+    Op::Binary(BinaryOp::IsEq),
+    Op::Binary(BinaryOp::IsLt),
+    Op::Binary(BinaryOp::IsGt),
     Op::Binary(BinaryOp::Add),
     Op::Binary(BinaryOp::Sub),
     Op::Binary(BinaryOp::Mul),
@@ -119,6 +125,9 @@ fn consume_expression<'a>(
                 TokenType::Slash => BinaryOp::Div,
                 TokenType::Caret => BinaryOp::Pow,
                 TokenType::Equals => BinaryOp::Assign,
+                TokenType::DoubleEquals => BinaryOp::IsEq,
+                TokenType::LeftAngle => BinaryOp::IsLt,
+                TokenType::RightAngle => BinaryOp::IsGt,
                 TokenType::Bracket(Bracket {
                     type_: BracketType::Round,
                     side: BracketSide::Open,
