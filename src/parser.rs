@@ -169,7 +169,7 @@ fn consume_expression<'a>(
                 _ => {
                     return Err(ParserError {
                         tokens: tokens,
-                        errmsg: "unary operator expected".into(),
+                        errmsg: "expected unary operator or an operand here".into(),
                         error_token_idx: i,
                     })
                 }
@@ -212,6 +212,13 @@ fn consume_operand<'a>(
                 error_token_idx: i,
             }),
         };
+    } else if next.t == TokenType::String {
+        return Ok((
+            Some(Expression::Value(Box::new(Value::String(
+                next.lexeme[1..next.lexeme.len() - 1].into(),
+            )))),
+            i + 1,
+        ));
     } else if next.t == TokenType::Identifier {
         return Ok((Some(Expression::Variable(next.lexeme.to_owned())), i + 1));
     } else if next.t == TokenType::RoundBracketOpen {

@@ -1,3 +1,5 @@
+use crate::errors::TokenizerError;
+
 use super::errors;
 use std::fmt;
 
@@ -14,6 +16,7 @@ pub enum TokenType {
     Caret,
     Equals,
     Identifier,
+    String,
 }
 
 #[derive(PartialEq, Eq, Clone)]
@@ -68,23 +71,36 @@ pub fn tokenize<'a>(code: &'a String) -> Result<Vec<Token<'a>>, errors::Tokenize
         // lookahead matching of "long" tokens with subiteration
         let maybe_long_token = match lookahead_char {
             numeric_char if is_numeric_char(numeric_char) => {
-                let number_end_idx: usize;
-                (number_end_idx, current_char) =
-                    iter_while_predicate(&mut code_chars, is_numeric_char)
-                        .unwrap_or((code.len(), None));
+                let end_idx: usize;
+                (end_idx, current_char) = iter_while_predicate(&mut code_chars, is_numeric_char)
+                    .unwrap_or((code.len(), None));
                 Some(Token {
                     t: TokenType::Number,
-                    lexeme: &code[lookahead_idx..number_end_idx],
+                    lexeme: &code[lookahead_idx..end_idx],
                 })
             }
             first_identifier_char if first_identifier_char.is_ascii_alphabetic() => {
-                let identifier_end_idx: usize;
-                (identifier_end_idx, current_char) =
+                let end_idx: usize;
+                (end_idx, current_char) =
                     iter_while_predicate(&mut code_chars, |ch| ch.is_ascii_alphanumeric())
                         .unwrap_or((code.len(), None));
                 Some(Token {
                     t: TokenType::Identifier,
-                    lexeme: &code[lookahead_idx..identifier_end_idx],
+                    lexeme: &code[lookahead_idx..end_idx],
+                })
+            }
+            '"' => {
+                let (end_idx, _) = iter_while_predicate(&mut code_chars, |ch| ch != '"').ok_or(
+                    TokenizerError {
+                        code: &code,
+                        errmsg: "unterminated string literal".into(),
+                        error_char_idx: code.len() - 1,
+                    },
+                )?;
+                code_chars.next(); // consuming closing quote
+                Some(Token {
+                    t: TokenType::String,
+                    lexeme: &code[lookahead_idx..=end_idx],
                 })
             }
             _ => None,

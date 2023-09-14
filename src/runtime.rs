@@ -19,7 +19,12 @@ macro_rules! apply {
         match maybe_res {
             Some(v) => Ok(Box::new(v)),
             None => Err(RuntimeError {
-                errmsg: format!("{} is not defined for {} and {}", $op_name, $left, $right),
+                errmsg: format!(
+                    "{} is not defined for {} and {}",
+                    $op_name,
+                    $left.type_name(),
+                    $right.type_name()
+                ),
             }),
         }
     }};
@@ -70,6 +75,11 @@ fn eval_expression(
 fn add(a: &Value, b: &Value) -> Option<Value> {
     match (a, b) {
         (Value::Float(f1), Value::Float(f2)) => Some(Value::Float(f1 + f2)),
+        (Value::String(s1), Value::String(s2)) => {
+            let mut res = s1.clone();
+            res.push_str(s2);
+            Some(Value::String(res))
+        }
         _ => None,
     }
 }
