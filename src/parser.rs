@@ -130,7 +130,14 @@ fn consume_expression<'a>(
                 TokenType::Slash => BinaryOp::Div,
                 TokenType::Caret => BinaryOp::Pow,
                 TokenType::Equals => BinaryOp::Assign,
-                _ => BinaryOp::FunctionCall,
+                TokenType::RoundBracketOpen => BinaryOp::FunctionCall,
+                _ => {
+                    return Err(ParserError {
+                        tokens: tokens,
+                        errmsg: "binary operator expected here".into(),
+                        error_token_idx: i,
+                    })
+                }
             };
             let next_op_token_count: usize = if next_binary_op == BinaryOp::FunctionCall {
                 0
@@ -205,6 +212,13 @@ fn consume_operand<'a>(
         let mut j = i + 1;
         while j < tokens.len() && open_bracket_count > 0 {
             let tt = &tokens[j].t;
+            if *tt == TokenType::ExprEnd {
+                return Err(ParserError {
+                    tokens: tokens,
+                    errmsg: "expression terminated inside brackets".into(),
+                    error_token_idx: j,
+                });
+            }
             if *tt == TokenType::RoundBracketOpen {
                 open_bracket_count += 1;
             } else if *tt == TokenType::RoundBracketClose {
@@ -229,7 +243,6 @@ fn consume_operand<'a>(
         }
         let (bracketed_expr, _) = consume_expression(bracketed_tokens, 0, None, true)?;
         return Ok((Some(bracketed_expr), j));
-        // return parse(bracketed_tokens + [Token(type=TokenType.EXPR_END, lexeme="")])[-1], j
     } else {
         return Ok((None, i));
     }

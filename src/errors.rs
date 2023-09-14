@@ -109,7 +109,7 @@ impl Display for ParserError<'_> {
             .unwrap_or(self.tokens.len() - self.error_token_idx);
 
         let code_context_tokens: Vec<Token<'_>> = self.tokens
-            [self.error_token_idx - start_offset..self.error_token_idx + end_offset]
+            [self.error_token_idx - start_offset..=self.error_token_idx + end_offset]
             .into();
         let code_context_line = untokenize(&code_context_tokens);
 
