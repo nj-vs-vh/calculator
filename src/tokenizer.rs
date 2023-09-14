@@ -1,4 +1,7 @@
-use crate::errors::TokenizerError;
+use crate::{
+    bracket::{Bracket, BracketSide, BracketType},
+    errors::TokenizerError,
+};
 
 use super::errors;
 use std::fmt;
@@ -10,8 +13,7 @@ pub enum TokenType {
     Minus,
     Star,
     Slash,
-    RoundBracketOpen,
-    RoundBracketClose,
+    Bracket(Bracket),
     ExprEnd,
     Caret,
     Equals,
@@ -31,7 +33,7 @@ impl fmt::Debug for Token<'_> {
     }
 }
 
-pub fn tokenize<'a>(code: &'a String) -> Result<Vec<Token<'a>>, errors::TokenizerError> {
+pub fn tokenize<'a>(code: &'a str) -> Result<Vec<Token<'a>>, errors::TokenizerError> {
     let mut tokens = Vec::new();
 
     if code.len() == 0 {
@@ -176,11 +178,25 @@ fn match_char(ch: char) -> CharMatch {
         '-' => CharMatch::Token(TokenType::Minus),
         '*' => CharMatch::Token(TokenType::Star),
         '/' => CharMatch::Token(TokenType::Slash),
-        '(' => CharMatch::Token(TokenType::RoundBracketOpen),
-        ')' => CharMatch::Token(TokenType::RoundBracketClose),
+        '(' => CharMatch::Token(TokenType::Bracket(Bracket {
+            type_: BracketType::Round,
+            side: BracketSide::Open,
+        })),
+        ')' => CharMatch::Token(TokenType::Bracket(Bracket {
+            type_: BracketType::Round,
+            side: BracketSide::Close,
+        })),
         ';' => CharMatch::Token(TokenType::ExprEnd),
         '=' => CharMatch::Token(TokenType::Equals),
         '^' => CharMatch::Token(TokenType::Caret),
+        '{' => CharMatch::Token(TokenType::Bracket(Bracket {
+            type_: BracketType::Curly,
+            side: BracketSide::Open,
+        })),
+        '}' => CharMatch::Token(TokenType::Bracket(Bracket {
+            type_: BracketType::Curly,
+            side: BracketSide::Close,
+        })),
         ws if ws.is_whitespace() => CharMatch::Whitespace,
         _ => CharMatch::Unexpected,
     }
@@ -188,23 +204,56 @@ fn match_char(ch: char) -> CharMatch {
 
 pub fn untokenize(tokens: &[Token]) -> String {
     let mut res = String::new();
+
     let token_iter_1 = tokens.iter();
     let mut token_iter_2 = tokens.iter();
     token_iter_2.next();
 
+    let mut current_indent: usize = 0;
+    const INDENT_SPACES: usize = 2;
+
     for (token_l, token_r) in token_iter_1.zip(token_iter_2) {
         res.push_str(token_l.lexeme);
         let delimiter = match (token_l.t, token_r.t) {
-            (TokenType::RoundBracketOpen, _) => "",
-            (_, TokenType::RoundBracketClose) => "",
             (TokenType::Caret, _) => "",
             (_, TokenType::Caret) => "",
-            (TokenType::Identifier, TokenType::RoundBracketOpen) => "",
+            (
+                TokenType::Identifier,
+                TokenType::Bracket(Bracket {
+                    type_: BracketType::Round,
+                    side: BracketSide::Open,
+                }),
+            ) => "",
             (_, TokenType::ExprEnd) => "",
             (TokenType::ExprEnd, _) => "\n",
+            (
+                TokenType::Bracket(Bracket {
+                    type_: BracketType::Curly,
+                    side: BracketSide::Open,
+                }),
+                _,
+            ) => {
+                current_indent += 1;
+                "\n"
+            }
+            (
+                _,
+                TokenType::Bracket(Bracket {
+                    type_: BracketType::Curly,
+                    side: BracketSide::Close,
+                }),
+            ) => {
+                current_indent -= 1;
+                "\n"
+            }
+            (TokenType::Bracket(b), _) if b.side == BracketSide::Open => "",
+            (_, TokenType::Bracket(b)) if b.side == BracketSide::Close => "",
             _ => " ",
         };
         res.push_str(delimiter);
+        if delimiter.ends_with("\n") {
+            res.push_str(&" ".repeat(current_indent * INDENT_SPACES))
+        }
     }
     res.push_str(tokens[tokens.len() - 1].lexeme);
     return res;

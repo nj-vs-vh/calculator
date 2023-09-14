@@ -106,7 +106,7 @@ impl Display for ParserError<'_> {
             .enumerate()
             .find(|&(_, tok)| tok.t == TokenType::ExprEnd)
             .map(|(idx, _)| idx)
-            .unwrap_or(self.tokens.len() - self.error_token_idx);
+            .unwrap_or(self.tokens.len() - self.error_token_idx - 1);
 
         let code_context_tokens: Vec<Token<'_>> = self.tokens
             [self.error_token_idx - start_offset..=self.error_token_idx + end_offset]

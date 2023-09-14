@@ -1,4 +1,5 @@
 use crate::{
+    bracket::{Bracket, BracketSide, BracketStack, BracketType},
     errors::ParserError,
     tokenizer::{Token, TokenType},
     values::Value,
@@ -32,15 +33,6 @@ pub struct UnaryOperation {
     pub op: UnaryOp,
     pub operand: Box<Expression>,
 }
-
-#[derive(Debug, Clone)]
-pub enum Expression {
-    Value(Box<Value>),
-    Variable(String),
-    Bin(BinaryOperation),
-    Un(UnaryOperation),
-}
-
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 enum Op {
     Unary(UnaryOp),
@@ -79,16 +71,25 @@ impl PartialOrd for Op {
     }
 }
 
-pub fn parse<'a>(tokens: &'a [Token<'a>]) -> Result<Vec<Expression>, ParserError<'a>> {
-    let mut result: Vec<Expression> = Vec::new();
+#[derive(Debug, Clone)]
+pub enum Expression {
+    Value(Box<Value>),
+    Variable(String),
+    Bin(BinaryOperation),
+    Un(UnaryOperation),
+    Scope(Vec<Expression>),
+}
+
+pub fn parse<'a>(tokens: &'a [Token<'a>]) -> Result<Expression, ParserError<'a>> {
+    let mut exprs: Vec<Expression> = Vec::new();
     let mut i = 0;
     while i < tokens.len() {
         let expr: Expression;
-        (expr, i) = consume_expression(tokens, i, None, false)?;
+        (expr, i) = consume_expression(tokens, i, None, true)?;
         i += 1; // skipping expr end
-        result.push(expr);
+        exprs.push(expr);
     }
-    return Ok(result);
+    return Ok(Expression::Scope(exprs));
 }
 
 fn consume_expression<'a>(
@@ -131,11 +132,14 @@ fn consume_expression<'a>(
                 TokenType::Slash => BinaryOp::Div,
                 TokenType::Caret => BinaryOp::Pow,
                 TokenType::Equals => BinaryOp::Assign,
-                TokenType::RoundBracketOpen => BinaryOp::FunctionCall,
+                TokenType::Bracket(Bracket {
+                    type_: BracketType::Round,
+                    side: BracketSide::Open,
+                }) => BinaryOp::FunctionCall,
                 _ => {
                     return Err(ParserError {
                         tokens: tokens,
-                        errmsg: "binary operator expected here".into(),
+                        errmsg: "binary operator expected".into(),
                         error_token_idx: i,
                     })
                 }
@@ -221,33 +225,48 @@ fn consume_operand<'a>(
         ));
     } else if next.t == TokenType::Identifier {
         return Ok((Some(Expression::Variable(next.lexeme.to_owned())), i + 1));
-    } else if next.t == TokenType::RoundBracketOpen {
-        let mut open_bracket_count = 1;
+    } else if let TokenType::Bracket(Bracket {
+        type_: bracket_type,
+        side: BracketSide::Open,
+    }) = next.t
+    {
+        let mut bracket_stack = BracketStack::new();
+        bracket_stack
+            .update(Bracket {
+                type_: bracket_type,
+                side: BracketSide::Open,
+            })
+            .unwrap();
         let mut j = i + 1;
-        while j < tokens.len() && open_bracket_count > 0 {
+        while j < tokens.len() && !bracket_stack.is_empty() {
             let tt = &tokens[j].t;
-            if *tt == TokenType::ExprEnd {
+            if bracket_type == BracketType::Round && *tt == TokenType::ExprEnd {
                 return Err(ParserError {
                     tokens: tokens,
-                    errmsg: "expression terminated inside brackets".into(),
+                    errmsg: "expression terminated inside round brackets".into(),
                     error_token_idx: j,
                 });
             }
-            if *tt == TokenType::RoundBracketOpen {
-                open_bracket_count += 1;
-            } else if *tt == TokenType::RoundBracketClose {
-                open_bracket_count -= 1;
+            if let TokenType::Bracket(b) = tt {
+                if let Err(update_errmsg) = bracket_stack.update(*b) {
+                    return Err(ParserError {
+                        tokens: tokens,
+                        errmsg: update_errmsg,
+                        error_token_idx: j,
+                    });
+                }
             }
             j += 1;
         }
-        let bracketed_tokens = &tokens[i + 1..j - 1];
-        if open_bracket_count > 0 {
+        if !bracket_stack.is_empty() {
             return Err(ParserError {
                 tokens: tokens,
                 errmsg: "unclosed bracket".into(),
                 error_token_idx: i,
             });
         }
+
+        let bracketed_tokens = &tokens[i + 1..j - 1];
         if bracketed_tokens.len() == 0 {
             return Err(ParserError {
                 tokens: tokens,
@@ -255,7 +274,11 @@ fn consume_operand<'a>(
                 error_token_idx: i,
             });
         }
-        let (bracketed_expr, _) = consume_expression(bracketed_tokens, 0, None, true)?;
+
+        let bracketed_expr = match bracket_type {
+            BracketType::Round => consume_expression(bracketed_tokens, 0, None, true)?.0,
+            BracketType::Curly => parse(bracketed_tokens)?,
+        };
         return Ok((Some(bracketed_expr), j));
     } else {
         return Ok((None, i));

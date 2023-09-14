@@ -5,14 +5,14 @@ use crate::parser::{BinaryOp, Expression, UnaryOp};
 use crate::values::functions::builtin;
 use crate::values::Value;
 
-pub fn eval(expressions: &[Expression]) -> Result<Vec<Box<Value>>, RuntimeError> {
-    let mut results: Vec<Box<Value>> = Vec::new();
-    let mut variables: HashMap<String, Box<Value>> = HashMap::new();
-    for expr in expressions {
-        results.push(eval_expression(expr, &mut variables)?);
-    }
-    return Ok(results);
-}
+// pub fn eval(expressions: &[Expression]) -> Result<Vec<Box<Value>>, RuntimeError> {
+//     let mut results: Vec<Box<Value>> = Vec::new();
+//     let mut variables: HashMap<String, Box<Value>> = HashMap::new();
+//     for expr in expressions {
+//         results.push(eval_expression(expr, &mut variables)?);
+//     }
+//     return Ok(results);
+// }
 
 macro_rules! apply_bin {
     ( $func:expr, $left:expr, $right:expr, $op_name:expr ) => {{
@@ -43,7 +43,7 @@ macro_rules! apply_un {
     }};
 }
 
-fn eval_expression(
+pub fn eval(
     expr: &Expression,
     variables: &mut HashMap<String, Box<Value>>,
 ) -> Result<Box<Value>, RuntimeError> {
@@ -60,8 +60,21 @@ fn eval_expression(
                 });
             }
         }
+        Expression::Scope(scope_expressions) => {
+            if scope_expressions.is_empty() {
+                return Err(RuntimeError {
+                    errmsg: "empty scope".into(),
+                });
+            }
+            let mut results: Vec<Box<Value>> = Vec::new();
+            let mut local_variables = variables.clone();
+            for expr in scope_expressions {
+                results.push(eval(expr, &mut local_variables)?);
+            }
+            return Ok(results[results.len() - 1].clone());
+        }
         Expression::Bin(binary_operation) => {
-            let right_value = eval_expression(&binary_operation.right, variables)?;
+            let right_value = eval(&binary_operation.right, variables)?;
             if binary_operation.op == BinaryOp::Assign {
                 if let Expression::Variable(var_name) = binary_operation.left.clone().as_ref() {
                     variables.insert(var_name.clone(), right_value.clone());
@@ -72,7 +85,7 @@ fn eval_expression(
                     });
                 };
             }
-            let left_value = eval_expression(&binary_operation.left, variables)?;
+            let left_value = eval(&binary_operation.left, variables)?;
             match binary_operation.op {
                 BinaryOp::Add => apply_bin!(add, left_value, right_value, "addition"),
                 BinaryOp::Sub => apply_bin!(sub, left_value, right_value, "subtraction"),
@@ -95,7 +108,7 @@ fn eval_expression(
             }
         }
         Expression::Un(unary_operation) => {
-            let operand = eval_expression(&unary_operation.operand, variables)?;
+            let operand = eval(&unary_operation.operand, variables)?;
             match unary_operation.op {
                 UnaryOp::Neg => apply_un!(neg, operand, "negation"),
             }
@@ -166,11 +179,13 @@ mod tests {
     #[case("log(1)", Value::Float(0.0))]
     #[case("exp(0)", Value::Float(1.0))]
     #[case("a = exp; a(0)", Value::Float(1.0))]
+    #[case("{1} + {2}", Value::Float(3.0))]
+    #[case("{1} + {2}", Value::Float(3.0))]
     fn test_runtime_basic(#[case] code: &str, #[case] expected_result: Value) {
         let code_ = String::from(code);
         let tokens = tokenize(&code_).unwrap();
         let ast = parse(&tokens).unwrap();
-        let results = eval(&ast).unwrap();
-        assert_eq!(results.last().unwrap().as_ref().to_owned(), expected_result);
+        let result = eval(&ast, &mut HashMap::new());
+        assert_eq!(result.unwrap().as_ref().to_owned(), expected_result);
     }
 }
