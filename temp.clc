@@ -1,13 +1,8 @@
 a = 1;
 b = 2;
-print(a + b);
+res = if (a == b) {
+  print("equal");
+  10
+};
 
-print(length("hello world"));
-
-print( a == 1);
-
-foo = "bar";
-print(foo == "bar");
-
-a = exp;
-print(a == log);
+print(res);

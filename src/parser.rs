@@ -79,12 +79,20 @@ impl PartialOrd for Op {
 }
 
 #[derive(Debug, Clone)]
+pub struct If {
+    pub condition: Box<Expression>,
+    pub if_true: Box<Expression>,
+    pub if_false: Option<Box<Expression>>,
+}
+
+#[derive(Debug, Clone)]
 pub enum Expression {
     Value(Box<Value>),
     Variable(String),
     Bin(BinaryOperation),
     Un(UnaryOperation),
     Scope(Vec<Expression>),
+    If(If),
 }
 
 pub fn parse<'a>(tokens: &'a [Token<'a>]) -> Result<Expression, ParserError<'a>> {
@@ -92,7 +100,7 @@ pub fn parse<'a>(tokens: &'a [Token<'a>]) -> Result<Expression, ParserError<'a>>
     let mut i = 0;
     while i < tokens.len() {
         let expr: Expression;
-        (expr, i) = consume_expression(tokens, i, None)?;
+        (expr, i) = consume_expression(tokens, i, None, false)?;
         i += 1; // skipping expression end
         exprs.push(expr);
     }
@@ -103,6 +111,7 @@ fn consume_expression<'a>(
     tokens: &'a [Token<'a>],
     i: usize,
     prev_op: Option<Op>,
+    terminate_on_unknown_token: bool,
 ) -> Result<(Expression, usize), ParserError<'a>> {
     let mut result: Option<Expression> = None;
     let mut left: Option<Expression>;
@@ -133,9 +142,12 @@ fn consume_expression<'a>(
                     side: BracketSide::Open,
                 }) => BinaryOp::FunctionCall,
                 _ => {
+                    if terminate_on_unknown_token {
+                        return Ok((left, i));
+                    }
                     return Err(ParserError {
                         tokens: tokens,
-                        errmsg: "binary operator expected".into(),
+                        errmsg: "binary operator expected here".into(),
                         error_token_idx: i,
                     });
                 }
@@ -152,7 +164,12 @@ fn consume_expression<'a>(
                 }
             }
             let right: Expression;
-            (right, i) = consume_expression(tokens, i + next_op_token_count, Some(next_op))?;
+            (right, i) = consume_expression(
+                tokens,
+                i + next_op_token_count,
+                Some(next_op),
+                terminate_on_unknown_token,
+            )?;
             result = Some(Expression::Bin(BinaryOperation {
                 op: next_binary_op,
                 left: Box::new(left),
@@ -164,13 +181,18 @@ fn consume_expression<'a>(
                 _ => {
                     return Err(ParserError {
                         tokens: tokens,
-                        errmsg: "expected unary operator or an operand here".into(),
+                        errmsg: "unary operator or an operand expected here".into(),
                         error_token_idx: i,
                     })
                 }
             };
             let operand: Expression;
-            (operand, i) = consume_expression(tokens, i + 1, Some(Op::Unary(next_unary_op)))?;
+            (operand, i) = consume_expression(
+                tokens,
+                i + 1,
+                Some(Op::Unary(next_unary_op)),
+                terminate_on_unknown_token,
+            )?;
             result = Some(Expression::Un(UnaryOperation {
                 op: next_unary_op,
                 operand: Box::new(operand),
@@ -272,7 +294,7 @@ fn consume_operand<'a>(
             let bracketed_expr = match bracket_type {
                 BracketType::Round => {
                     let (expr, last_expr_token_offset_idx) =
-                        consume_expression(bracketed_tokens, 0, None)?;
+                        consume_expression(bracketed_tokens, 0, None, false)?;
                     if last_expr_token_offset_idx < bracketed_tokens.len() - 1 {
                         return Err(ParserError {
                             tokens: bracketed_tokens,
@@ -285,6 +307,38 @@ fn consume_operand<'a>(
                 BracketType::Curly => parse(bracketed_tokens)?,
             };
             return Ok((Some(bracketed_expr), j));
+        }
+        TokenType::If => {
+            let mut j = i + 1;
+            let conditon_expr: Expression;
+            (conditon_expr, j) = consume_expression(tokens, j, None, true)?;
+            if tokens[j].t == TokenType::ExprEnd {
+                j += 1;
+            }
+            let if_true_expr: Expression;
+            (if_true_expr, j) = consume_expression(tokens, j, None, true)?;
+
+            let maybe_else_pos = if tokens[j].t == TokenType::ExprEnd {
+                j + 1
+            } else {
+                j
+            };
+            let if_false_expr =
+                if maybe_else_pos < tokens.len() && tokens[maybe_else_pos].t == TokenType::Else {
+                    let expr: Expression;
+                    (expr, j) = consume_expression(tokens, maybe_else_pos + 1, None, false)?;
+                    Some(Box::new(expr))
+                } else {
+                    None
+                };
+            Ok((
+                Some(Expression::If(If {
+                    condition: Box::new(conditon_expr),
+                    if_true: Box::new(if_true_expr),
+                    if_false: if_false_expr,
+                })),
+                j,
+            ))
         }
         _ => Ok((None, i)),
     }

@@ -5,6 +5,7 @@ pub mod functions;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Value {
+    Nothing,
     Int(i32),
     Float(f32),
     String(String),
@@ -15,6 +16,7 @@ pub enum Value {
 impl Value {
     pub fn type_name(&self) -> &str {
         match self {
+            Value::Nothing => "nothing",
             Value::Int(_) => "integer",
             Value::Float(_) => "floating point number",
             Value::String(_) => "string",
@@ -29,6 +31,7 @@ impl Value {
 impl Display for Value {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            Value::Nothing => write!(f, "nothing"),
             Value::Int(v) => write!(f, "{}", v),
             Value::Float(v) => write!(f, "{}", v),
             Value::String(s) => write!(f, "\"{}\"", s),

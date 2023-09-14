@@ -21,6 +21,7 @@ pub enum TokenType {
     StringLiteral,
     BoolLiteral,
     If,
+    Else,
     LeftAngle,
     RightAngle,
     DoubleEquals,
@@ -115,7 +116,7 @@ pub fn tokenize<'a>(code: &'a str) -> Result<Vec<Token<'a>>, errors::TokenizerEr
                         return Err(TokenizerError {
                             code: code,
                             errmsg: "too much equal signs".into(),
-                            error_char_idx: end_idx,
+                            error_char_idx: end_idx - 1,
                         })
                     }
                 };
@@ -243,6 +244,7 @@ fn match_char(ch: char) -> CharMatch {
 fn match_keyword(lexeme: &str) -> Option<TokenType> {
     match lexeme {
         "if" => Some(TokenType::If),
+        "else" => Some(TokenType::Else),
         any_true if any_true.to_lowercase() == "true" => Some(TokenType::BoolLiteral),
         any_false if any_false.to_lowercase() == "false" => Some(TokenType::BoolLiteral),
         _ => None,
@@ -264,18 +266,6 @@ pub fn untokenize(tokens: &[Token], minified: bool) -> String {
     for (token_l, token_r) in token_iter_1.zip(token_iter_2) {
         res.push_str(&format_token(token_l));
         let delimiter = match (token_l.t, token_r.t) {
-            (TokenType::Caret, _) => "",
-            (_, TokenType::Caret) => "",
-            (
-                // function calls like log(10)
-                TokenType::Identifier,
-                TokenType::Bracket(Bracket {
-                    type_: BracketType::Round,
-                    side: BracketSide::Open,
-                }),
-            ) => "",
-            (_, TokenType::ExprEnd) => "",
-            (TokenType::ExprEnd, _) => newline.into(),
             (
                 TokenType::Bracket(Bracket {
                     type_: BracketType::Curly,
@@ -296,6 +286,19 @@ pub fn untokenize(tokens: &[Token], minified: bool) -> String {
                 current_indent = current_indent.saturating_sub(1);
                 newline.into()
             }
+            (TokenType::Caret, _) => "",
+            (_, TokenType::Caret) => "",
+            (
+                // function calls like log(10)
+                TokenType::Identifier,
+                TokenType::Bracket(Bracket {
+                    type_: BracketType::Round,
+                    side: BracketSide::Open,
+                }),
+            ) => "",
+            (_, TokenType::ExprEnd) => "",
+            (TokenType::ExprEnd, _) => newline.into(),
+
             (
                 TokenType::Bracket(Bracket {
                     type_: _,

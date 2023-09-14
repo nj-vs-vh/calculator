@@ -107,6 +107,25 @@ pub fn eval(
                 UnaryOp::Neg => apply_un!(neg, operand, "negation"),
             }
         }
+        Expression::If(if_) => {
+            let condition = eval(&if_.condition, variables)?;
+            if let Value::Bool(b) = condition.clone().as_ref() {
+                if *b {
+                    Ok(eval(&if_.if_true, variables)?)
+                } else if let Some(if_false_expr) = if_.if_false.clone() {
+                    Ok(eval(&if_false_expr, variables)?)
+                } else {
+                    Ok(Box::new(Value::Nothing))
+                }
+            } else {
+                Err(RuntimeError {
+                    errmsg: format!(
+                        "if condition must evaluate to bool, got {}",
+                        condition.type_name()
+                    ),
+                })
+            }
+        }
     }
 }
 
@@ -250,6 +269,13 @@ mod tests {
     #[case("true == 2 > 1", Value::Bool(true))]
     #[case("2.5 > 1", Value::Bool(true))]
     #[case("2.5 > 1.5", Value::Bool(true))]
+    #[case("if true 1", Value::Int(1))]
+    #[case("a = if true 1; b = a", Value::Int(1))]
+    #[case("a = if true {1}; b = a", Value::Int(1))]
+    #[case("if false 1", Value::Nothing)]
+    #[case("if false 1 else 2", Value::Int(2))]
+    #[case("a = 3; b = 5; res = if a < b 1 else 2; res", Value::Int(1))]
+    #[case("a = 3; b = 5; res = if (a < b) { 1 } else { 2 }; res", Value::Int(1))]
     fn test_runtime_basic(#[case] code: &str, #[case] expected_result: Value) {
         let code_ = String::from(code);
         let tokens = tokenize(&code_).unwrap();
