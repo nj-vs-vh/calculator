@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
-use crate::errors::{ParserError, RuntimeError};
-use crate::parser::{BinaryOp, Expression};
+use crate::errors::RuntimeError;
+use crate::parser::{BinaryOp, Expression, UnaryOp};
 use crate::values::Value;
 
 pub fn eval(expressions: &[Expression]) -> Result<Vec<Box<Value>>, RuntimeError> {
@@ -13,7 +13,7 @@ pub fn eval(expressions: &[Expression]) -> Result<Vec<Box<Value>>, RuntimeError>
     return Ok(results);
 }
 
-macro_rules! apply {
+macro_rules! apply_bin {
     ( $func:expr, $left:expr, $right:expr, $op_name:expr ) => {{
         let maybe_res = $func(&$left, &$right);
         match maybe_res {
@@ -25,6 +25,18 @@ macro_rules! apply {
                     $left.type_name(),
                     $right.type_name()
                 ),
+            }),
+        }
+    }};
+}
+
+macro_rules! apply_un {
+    ( $func:expr, $left:expr, $op_name:expr ) => {{
+        let maybe_res = $func(&$left);
+        match maybe_res {
+            Some(v) => Ok(Box::new(v)),
+            None => Err(RuntimeError {
+                errmsg: format!("{} is not defined for {}", $op_name, $left.type_name(),),
             }),
         }
     }};
@@ -58,17 +70,20 @@ fn eval_expression(
             }
             let left_value = eval_expression(&binary_operation.left, variables)?;
             match binary_operation.op {
-                BinaryOp::Add => apply!(add, left_value, right_value, "addition"),
-                BinaryOp::Sub => apply!(sub, left_value, right_value, "subtraction"),
-                BinaryOp::Mul => apply!(mul, left_value, right_value, "multiplication"),
-                BinaryOp::Div => apply!(div, left_value, right_value, "division"),
-                BinaryOp::Pow => apply!(pow, left_value, right_value, "power"),
+                BinaryOp::Add => apply_bin!(add, left_value, right_value, "addition"),
+                BinaryOp::Sub => apply_bin!(sub, left_value, right_value, "subtraction"),
+                BinaryOp::Mul => apply_bin!(mul, left_value, right_value, "multiplication"),
+                BinaryOp::Div => apply_bin!(div, left_value, right_value, "division"),
+                BinaryOp::Pow => apply_bin!(pow, left_value, right_value, "power"),
                 _ => todo!(),
             }
         }
-        _ => Err(RuntimeError {
-            errmsg: "TBD".into(),
-        }),
+        Expression::Un(unary_operation) => {
+            let operand = eval_expression(&unary_operation.operand, variables)?;
+            match unary_operation.op {
+                UnaryOp::Neg => apply_un!(neg, operand, "negation"),
+            }
+        }
     }
 }
 
@@ -105,5 +120,38 @@ fn pow(a: &Value, b: &Value) -> Option<Value> {
     match (a, b) {
         (Value::Float(f1), Value::Float(f2)) => Some(Value::Float(f1.powf(*f2))),
         _ => None,
+    }
+}
+
+fn neg(v: &Value) -> Option<Value> {
+    match v {
+        Value::Float(v) => Some(Value::Float(-v)),
+        _ => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::parse;
+    use crate::tokenize;
+    use rstest::rstest;
+
+    #[rstest]
+    #[case("1", Value::Float(1.0))]
+    #[case("1;", Value::Float(1.0))]
+    #[case("1 + 1;", Value::Float(2.0))]
+    #[case("1 + 2 * 3 ^ 2 * 5 + 10;", Value::Float(101.0))]
+    #[case("1 + (2 * (3 ^ 2) * 5) + 10;", Value::Float(101.0))]
+    #[case("a = 5; b = 6; a + b", Value::Float(11.0))]
+    #[case("a = 5; b = 6; d = c = a + b; d", Value::Float(11.0))]
+    #[case("2 + -3", Value::Float(-1.0))]
+    #[case("-3 ^ 4", Value::Float(-81.0))]
+    fn test_runtime_basic(#[case] code: &str, #[case] expected_result: Value) {
+        let code_ = String::from(code);
+        let tokens = tokenize(&code_).unwrap();
+        let ast = parse(&tokens).unwrap();
+        let results = eval(&ast).unwrap();
+        assert_eq!(results.last().unwrap().as_ref().to_owned(), expected_result);
     }
 }

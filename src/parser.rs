@@ -85,7 +85,7 @@ pub fn parse<'a>(tokens: &'a [Token<'a>]) -> Result<Vec<Expression>, ParserError
     while i < tokens.len() {
         let expr: Expression;
         (expr, i) = consume_expression(tokens, i, None, false)?;
-        i += 1;
+        i += 1; // skipping expr end
         result.push(expr);
     }
     return Ok(result);
@@ -177,7 +177,7 @@ fn consume_expression<'a>(
             let operand: Expression;
             (operand, i) = consume_expression(
                 tokens,
-                i,
+                i + 1,
                 Some(Op::Unary(next_unary_op)),
                 allow_unterminated,
             )?;
