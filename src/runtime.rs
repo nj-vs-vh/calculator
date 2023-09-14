@@ -2,6 +2,7 @@ use std::collections::HashMap;
 
 use crate::errors::RuntimeError;
 use crate::parser::{BinaryOp, Expression, UnaryOp};
+use crate::values::functions::builtin;
 use crate::values::Value;
 
 pub fn eval(expressions: &[Expression]) -> Result<Vec<Box<Value>>, RuntimeError> {
@@ -49,12 +50,15 @@ fn eval_expression(
     match expr {
         Expression::Value(v) => Ok(v.clone()),
         Expression::Variable(var_name) => {
-            variables
-                .get(var_name)
-                .map(|ref_| ref_.clone())
-                .ok_or(RuntimeError {
+            if let Some(value) = variables.get(var_name).map(|ref_| ref_.clone()) {
+                return Ok(value);
+            } else if let Some(builtin_func) = builtin(&var_name) {
+                return Ok(Box::new(Value::Function(builtin_func)));
+            } else {
+                return Err(RuntimeError {
                     errmsg: format!("reference to non-existent variable \"{}\"", var_name),
-                })
+                });
+            }
         }
         Expression::Bin(binary_operation) => {
             let right_value = eval_expression(&binary_operation.right, variables)?;
@@ -75,7 +79,19 @@ fn eval_expression(
                 BinaryOp::Mul => apply_bin!(mul, left_value, right_value, "multiplication"),
                 BinaryOp::Div => apply_bin!(div, left_value, right_value, "division"),
                 BinaryOp::Pow => apply_bin!(pow, left_value, right_value, "power"),
-                _ => todo!(),
+                BinaryOp::FunctionCall => {
+                    if let Value::Function(func) = left_value.clone().as_ref() {
+                        match func.call(&right_value) {
+                            Ok(result) => Ok(Box::new(result)),
+                            Err(message) => Err(RuntimeError { errmsg: message }),
+                        }
+                    } else {
+                        Err(RuntimeError {
+                            errmsg: "not callable".into(),
+                        })
+                    }
+                }
+                BinaryOp::Assign => panic!("rtl assign"),
             }
         }
         Expression::Un(unary_operation) => {

@@ -1,9 +1,13 @@
 use std::fmt::Display;
 
+use crate::values::functions::Function;
+pub mod functions;
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum Value {
     Float(f32),
     String(String),
+    Function(Function),
 }
 
 impl Value {
@@ -11,6 +15,9 @@ impl Value {
         match self {
             Value::Float(_) => "float",
             Value::String(_) => "string",
+            Value::Function(f) => match f {
+                Function::Builtin(_) => "built-in function",
+            },
         }
     }
 }
