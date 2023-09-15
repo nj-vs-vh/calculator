@@ -1,3 +1,5 @@
+use std::fmt::Debug;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BracketType {
     Round,
@@ -6,14 +8,20 @@ pub enum BracketType {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BracketSide {
-    Open,
-    Close,
+    Opening,
+    Closing,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub struct Bracket {
     pub type_: BracketType,
     pub side: BracketSide,
+}
+
+impl Debug for Bracket {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}{:?}", self.type_, self.side)
+    }
 }
 
 pub struct BracketStack {
@@ -31,11 +39,11 @@ impl BracketStack {
 
     pub fn update(&mut self, bracket: Bracket) -> Result<(), String> {
         match bracket.side {
-            BracketSide::Open => {
+            BracketSide::Opening => {
                 self.stack.push(bracket.type_);
                 Ok(())
             }
-            BracketSide::Close => {
+            BracketSide::Closing => {
                 if self.stack.is_empty() || self.stack[self.stack.len() - 1] != bracket.type_ {
                     Err("unmatched closing bracket".into())
                 } else {

@@ -99,6 +99,17 @@ pub fn eval(
                 BinaryOp::IsLt => apply_bin!(lt, left_value, right_value, "less-than"),
                 BinaryOp::IsGt => apply_bin!(gt, left_value, right_value, "greater-than"),
                 BinaryOp::FormTuple => Ok(Box::new(Value::Tuple(vec![left_value, right_value]))),
+                BinaryOp::AppendToTuple => {
+                    if let Value::Tuple(left_tuple) = left_value.to_owned().as_ref() {
+                        let mut left_tuple_copy = left_tuple.clone();
+                        left_tuple_copy.push(right_value);
+                        Ok(Box::new(Value::Tuple(left_tuple_copy)))
+                    } else {
+                        Err(RuntimeError {
+                            errmsg: "internal error: can't append to non-tuple value".into(),
+                        })
+                    }
+                }
                 BinaryOp::FunctionCall => {
                     if let Value::Function(func) = left_value.clone().as_ref() {
                         match func.call(right_value, &vars) {
@@ -350,6 +361,20 @@ mod tests {
         "func fib(n); {if (n < 3) {return 1;} else {return fib(n - 1) + fib(n - 2);}}; fib(12)",
         Value::Int(144)
     )]
+    #[case("1, 2", Value::Tuple(vec![Box::new(Value::Int(1)), Box::new(Value::Int(2))]))]
+    #[case("(1, 2)", Value::Tuple(vec![Box::new(Value::Int(1)), Box::new(Value::Int(2))]))]
+    #[case("(1, 2, 3)", Value::Tuple(vec![
+        Box::new(Value::Int(1)),
+        Box::new(Value::Int(2)),
+        Box::new(Value::Int(3)),
+    ]))]
+    #[case("((1, 2), 3)", Value::Tuple(vec![
+        Box::new(Value::Tuple(vec![
+            Box::new(Value::Int(1)),
+            Box::new(Value::Int(2)),
+        ])),
+        Box::new(Value::Int(3)),
+    ]))]
     fn test_runtime_basic(#[case] code: &str, #[case] expected_result: Value) {
         let code_ = String::from(code);
         let tokens = tokenize(&code_).unwrap();

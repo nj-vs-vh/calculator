@@ -22,6 +22,7 @@ pub enum BinaryOp {
     IsLt,
     FunctionCall,
     FormTuple,
+    AppendToTuple,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -64,12 +65,6 @@ impl Op {
 
     fn is_rtl(&self) -> bool {
         *self == Op::Binary(BinaryOp::Assign) || *self == Op::Binary(BinaryOp::FunctionCall)
-    }
-}
-
-impl PartialOrd for Op {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        self.precedence().partial_cmp(&other.precedence())
     }
 }
 
@@ -127,14 +122,15 @@ pub fn parse_scope<'a>(
 fn consume_expression<'a>(
     tokens: &'a [Token<'a>],
     i: usize,
-    prev_op: Option<Op>,
+    outer_op: Option<Op>,
     terminate_on_unexpected_token: bool,
 ) -> Result<(Expression, usize), ParserError<'a>> {
     let mut result: Option<Expression> = None;
     let mut left: Option<Expression>;
+    let mut prev_op: Option<Op> = None;
     let mut i = i;
     loop {
-        (left, i) = if *&result.is_none() {
+        (left, i) = if result.is_none() {
             consume_operand(tokens, i)?
         } else {
             (result, i)
@@ -154,10 +150,20 @@ fn consume_expression<'a>(
                 TokenType::DoubleEquals => BinaryOp::IsEq,
                 TokenType::LeftAngle => BinaryOp::IsLt,
                 TokenType::RightAngle => BinaryOp::IsGt,
-                TokenType::Comma => BinaryOp::FormTuple,
+                TokenType::Comma => {
+                    let mut repeating_comma_op = None;
+                    if let Some(prev_op) = prev_op {
+                        if prev_op == Op::Binary(BinaryOp::FormTuple)
+                            || prev_op == Op::Binary(BinaryOp::AppendToTuple)
+                        {
+                            repeating_comma_op = Some(BinaryOp::AppendToTuple);
+                        }
+                    }
+                    repeating_comma_op.unwrap_or(BinaryOp::FormTuple)
+                }
                 TokenType::Bracket(Bracket {
                     type_: BracketType::Round,
-                    side: BracketSide::Open,
+                    side: BracketSide::Opening,
                 }) => BinaryOp::FunctionCall,
                 _ => {
                     if terminate_on_unexpected_token {
@@ -175,17 +181,18 @@ fn consume_expression<'a>(
             } else {
                 1
             };
-            let next_op = Op::Binary(next_binary_op);
-            if let Some(prev_op) = prev_op {
-                if next_op < prev_op || (next_op == prev_op && !next_op.is_rtl()) {
+            let op = Op::Binary(next_binary_op);
+            if let Some(prev_op) = outer_op {
+                if op.precedence() < prev_op.precedence() || (op == prev_op && !op.is_rtl()) {
                     return Ok((left, i));
                 }
             }
+            prev_op = Some(op);
             let right: Expression;
             (right, i) = consume_expression(
                 tokens,
                 i + next_op_token_count,
-                Some(next_op),
+                Some(op),
                 terminate_on_unexpected_token,
             )?;
             result = Some(Expression::BinaryOperation {
@@ -279,13 +286,13 @@ fn consume_operand<'a>(
         TokenType::Identifier => Ok((Some(Expression::Variable(next.lexeme.to_owned())), i + 1)),
         TokenType::Bracket(Bracket {
             type_: bracket_type,
-            side: BracketSide::Open,
+            side: BracketSide::Opening,
         }) => {
             let mut bracket_stack = BracketStack::new();
             bracket_stack
                 .update(Bracket {
                     type_: bracket_type,
-                    side: BracketSide::Open,
+                    side: BracketSide::Opening,
                 })
                 .unwrap();
             let mut j = i + 1;

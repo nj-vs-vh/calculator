@@ -222,11 +222,11 @@ fn match_char(ch: char) -> CharMatch {
         '/' => CharMatch::Token(TokenType::Slash),
         '(' => CharMatch::Token(TokenType::Bracket(Bracket {
             type_: BracketType::Round,
-            side: BracketSide::Open,
+            side: BracketSide::Opening,
         })),
         ')' => CharMatch::Token(TokenType::Bracket(Bracket {
             type_: BracketType::Round,
-            side: BracketSide::Close,
+            side: BracketSide::Closing,
         })),
         ';' => CharMatch::Token(TokenType::ExprEnd),
         '=' => CharMatch::Token(TokenType::Equals),
@@ -235,11 +235,11 @@ fn match_char(ch: char) -> CharMatch {
         '>' => CharMatch::Token(TokenType::RightAngle),
         '{' => CharMatch::Token(TokenType::Bracket(Bracket {
             type_: BracketType::Curly,
-            side: BracketSide::Open,
+            side: BracketSide::Opening,
         })),
         '}' => CharMatch::Token(TokenType::Bracket(Bracket {
             type_: BracketType::Curly,
-            side: BracketSide::Close,
+            side: BracketSide::Closing,
         })),
         ',' => CharMatch::Token(TokenType::Comma),
         // '#' => CharMatch::CommentStart,
@@ -279,7 +279,7 @@ pub fn untokenize(tokens: &[Token], minified: bool) -> String {
             (
                 TokenType::Bracket(Bracket {
                     type_: BracketType::Curly,
-                    side: BracketSide::Open,
+                    side: BracketSide::Opening,
                 }),
                 _,
             ) => {
@@ -290,7 +290,7 @@ pub fn untokenize(tokens: &[Token], minified: bool) -> String {
                 _,
                 TokenType::Bracket(Bracket {
                     type_: BracketType::Curly,
-                    side: BracketSide::Close,
+                    side: BracketSide::Closing,
                 }),
             ) => {
                 current_indent = current_indent.saturating_sub(1);
@@ -304,7 +304,7 @@ pub fn untokenize(tokens: &[Token], minified: bool) -> String {
                 TokenType::Identifier,
                 TokenType::Bracket(Bracket {
                     type_: BracketType::Round,
-                    side: BracketSide::Open,
+                    side: BracketSide::Opening,
                 }),
             ) => "",
             (_, TokenType::ExprEnd) => "",
@@ -313,7 +313,7 @@ pub fn untokenize(tokens: &[Token], minified: bool) -> String {
             (
                 TokenType::Bracket(Bracket {
                     type_: _,
-                    side: BracketSide::Open,
+                    side: BracketSide::Opening,
                 }),
                 _,
             ) => "",
@@ -321,7 +321,7 @@ pub fn untokenize(tokens: &[Token], minified: bool) -> String {
                 _,
                 TokenType::Bracket(Bracket {
                     type_: _,
-                    side: BracketSide::Close,
+                    side: BracketSide::Closing,
                 }),
             ) => "",
             _ => " ",
