@@ -1,12 +1,14 @@
 use std::{collections::HashMap, fs, path::PathBuf};
 
 use crate::{
+    debug::print_tree,
     parser::parse,
     runtime::eval,
     tokenizer::{tokenize, untokenize},
 };
 
 mod bracket;
+mod debug;
 mod errors;
 mod parser;
 mod runtime;
@@ -59,7 +61,7 @@ fn main() {
     }
 
     let parser_result = parse(&tokens);
-    let expressions = match parser_result {
+    let expression = match parser_result {
         Err(e) => {
             println!("{}", e);
             return;
@@ -67,10 +69,11 @@ fn main() {
         Ok(exprs) => exprs,
     };
     if args.verbose > 0 {
-        println!("AST:\n{:?}", expressions);
+        println!("AST:");
+        print_tree(&expression);
     }
 
-    let eval_result = eval(&expressions, &mut HashMap::new());
+    let eval_result = eval(&expression, &mut HashMap::new());
     let result = match eval_result {
         Err(e) => {
             println!("{}", e);

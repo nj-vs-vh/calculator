@@ -42,7 +42,7 @@ impl Display for Value {
             Value::Nothing => write!(f, "nothing"),
             Value::Int(v) => write!(f, "{}", v),
             Value::Float(v) => write!(f, "{}", v),
-            Value::String(s) => write!(f, "\"{}\"", s),
+            Value::String(s) => write!(f, "{}", s),
             Value::Bool(v) => write!(f, "{}", if *v { "True" } else { "False" }),
             Value::Tuple(vec) => {
                 write!(f, "(")?;

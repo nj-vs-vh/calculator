@@ -277,6 +277,7 @@ pub fn untokenize(tokens: &[Token], minified: bool) -> String {
         res.push_str(&format_token(token_l));
         let delimiter = match (token_l.t, token_r.t) {
             (
+                // opening block
                 TokenType::Bracket(Bracket {
                     type_: BracketType::Curly,
                     side: BracketSide::Opening,
@@ -287,6 +288,7 @@ pub fn untokenize(tokens: &[Token], minified: bool) -> String {
                 newline.into()
             }
             (
+                // closing block
                 _,
                 TokenType::Bracket(Bracket {
                     type_: BracketType::Curly,

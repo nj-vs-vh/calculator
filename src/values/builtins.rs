@@ -37,6 +37,16 @@ fn random(arg: &Value) -> Result<Value, String> {
         Err("\"random\" built-in function accepts no arguments".into())
     }
 }
+fn mod_(arg: &Value) -> Result<Value, String> {
+    if let Value::Tuple(elements) = arg {
+        if let [a, b] = &elements[..] {
+            if let (Value::Int(i1), Value::Int(i2)) = (a.clone().as_ref(), b.clone().as_ref()) {
+                return Ok(Value::Int(i1 % i2));
+            }
+        }
+    }
+    Err("\"mod\" accepts two integer arguments".into())
+}
 
 pub fn builtin(name: &str) -> Option<Function> {
     match name {
@@ -45,6 +55,7 @@ pub fn builtin(name: &str) -> Option<Function> {
         "print" => Some(Function::Builtin(print)),
         "length" => Some(Function::Builtin(length)),
         "random" => Some(Function::Builtin(random)),
+        "mod" => Some(Function::Builtin(mod_)),
         _ => None,
     }
 }
