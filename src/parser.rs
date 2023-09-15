@@ -86,7 +86,6 @@ impl PartialOrd for Op {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Scope {
     pub body: Vec<Expression>,
-    pub is_bound: bool,      // = can modify vars from outer scope
     pub is_returnable: bool, // = can be returned from
 }
 
@@ -116,12 +115,11 @@ pub enum Expression {
 }
 
 pub fn parse<'a>(tokens: &'a [Token<'a>]) -> Result<Expression, ParserError<'a>> {
-    parse_scope(tokens, false, true)
+    parse_scope(tokens, true)
 }
 
 pub fn parse_scope<'a>(
     tokens: &'a [Token<'a>],
-    is_bound: bool,
     is_returnable: bool,
 ) -> Result<Expression, ParserError<'a>> {
     let mut body: Vec<Expression> = Vec::new();
@@ -134,7 +132,6 @@ pub fn parse_scope<'a>(
     }
     return Ok(Expression::Scope(Scope {
         body,
-        is_bound,
         is_returnable,
     }));
 }
@@ -342,7 +339,7 @@ fn consume_operand<'a>(
                     }
                     expr
                 }
-                BracketType::Curly => parse_scope(bracketed_tokens, true, false)?,
+                BracketType::Curly => parse_scope(bracketed_tokens, false)?,
             };
             return Ok((Some(bracketed_expr), j));
         }
@@ -405,7 +402,6 @@ fn consume_operand<'a>(
                 func_body = match func_body {
                     Expression::Scope(scope) => Expression::Scope(Scope {
                         body: scope.body,
-                        is_bound: false,
                         is_returnable: true,
                     }),
                     other => other,

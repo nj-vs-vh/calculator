@@ -59,17 +59,8 @@ pub fn eval(
                 });
             }
             let mut results: Vec<Box<Value>> = Vec::new();
-            let mut vars_cloned = if scope.is_bound {
-                None
-            } else {
-                Some(vars.clone())
-            };
             for expr in scope.body.iter() {
-                let expr_value = if let Some(vars_cloned) = &mut vars_cloned {
-                    eval(expr, vars_cloned)?
-                } else {
-                    eval(expr, vars)?
-                };
+                let expr_value = eval(expr, vars)?;
                 if let Value::Returned(v) = expr_value.clone().deref() {
                     if scope.is_returnable {
                         return Ok(v.clone());

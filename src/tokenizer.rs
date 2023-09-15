@@ -29,6 +29,7 @@ pub enum TokenType {
     Bang,
     While,
     Func,
+    Comma,
 }
 
 #[derive(PartialEq, Eq, Clone)]
@@ -240,6 +241,7 @@ fn match_char(ch: char) -> CharMatch {
             type_: BracketType::Curly,
             side: BracketSide::Close,
         })),
+        ',' => CharMatch::Token(TokenType::Comma),
         // '#' => CharMatch::CommentStart,
         ws if ws.is_whitespace() => CharMatch::Whitespace,
         _ => CharMatch::Unexpected,
@@ -296,6 +298,7 @@ pub fn untokenize(tokens: &[Token], minified: bool) -> String {
             }
             (TokenType::Caret, _) => "",
             (_, TokenType::Caret) => "",
+            (_, TokenType::Comma) => "",
             (
                 // function calls like log(10)
                 TokenType::Identifier,
