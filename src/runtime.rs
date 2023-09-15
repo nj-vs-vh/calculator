@@ -3,7 +3,7 @@ use std::ops::Deref;
 
 use crate::errors::RuntimeError;
 use crate::parser::{BinaryOp, Expression, UnaryOp};
-use crate::values::functions::builtin;
+use crate::values::builtins::builtin;
 use crate::values::Value;
 
 macro_rules! apply_bin {

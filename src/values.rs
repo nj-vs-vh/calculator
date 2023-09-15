@@ -1,7 +1,8 @@
 use std::fmt::Display;
 
-use crate::values::functions::Function;
-pub mod functions;
+use crate::values::function::Function;
+pub mod builtins;
+pub mod function;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Value {

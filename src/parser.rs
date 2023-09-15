@@ -3,7 +3,7 @@ use crate::{
     errors::ParserError,
     tokenizer::{Token, TokenType},
     values::{
-        functions::{Function, UserDefinedFunction},
+        function::{Function, UserDefinedFunction},
         Value,
     },
 };
