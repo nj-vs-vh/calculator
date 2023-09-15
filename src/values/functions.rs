@@ -1,6 +1,7 @@
 use super::Value;
 
 type BuiltinFunction = fn(&Value) -> Result<Value, String>;
+use rand::Rng;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Function {
@@ -39,6 +40,14 @@ fn length(arg: &Value) -> Result<Value, String> {
         a => not_defined_for_arg("length", a),
     }
 }
+fn random(arg: &Value) -> Result<Value, String> {
+    let mut rng = rand::thread_rng();
+    if let Value::Nothing = arg {
+        Ok(Value::Float(rng.gen::<f32>()))
+    } else {
+        Err("random accpets no arguments".into())
+    }
+}
 
 pub fn builtin(name: &str) -> Option<Function> {
     match name {
@@ -46,6 +55,7 @@ pub fn builtin(name: &str) -> Option<Function> {
         "exp" => Some(Function::Builtin(exp)),
         "print" => Some(Function::Builtin(print)),
         "length" => Some(Function::Builtin(length)),
+        "random" => Some(Function::Builtin(random)),
         _ => None,
     }
 }
