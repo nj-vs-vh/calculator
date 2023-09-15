@@ -28,6 +28,7 @@ pub enum TokenType {
     Return,
     Bang,
     While,
+    Func,
 }
 
 #[derive(PartialEq, Eq, Clone)]
@@ -253,6 +254,7 @@ fn match_keyword(lexeme: &str) -> Option<TokenType> {
         any_false if any_false.to_lowercase() == "false" => Some(TokenType::BoolLiteral),
         "return" => Some(TokenType::Return),
         "while" => Some(TokenType::While),
+        "func" => Some(TokenType::Func),
         _ => None,
     }
 }

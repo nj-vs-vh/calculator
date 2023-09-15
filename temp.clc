@@ -1,7 +1,8 @@
-n = 0;
-while random() > 0.1 {
-  str = "A" * n;
-  n = n + 1;
-  print(str);
+func fib(n) {
+  if n < 3 {
+    1
+  } else {
+    fib(n - 1) + fib(n - 2)
+  }
 };
-print(n);
+print(fib(12));

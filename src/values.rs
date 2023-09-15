@@ -25,6 +25,7 @@ impl Value {
             Value::Bool(_) => "bool",
             Value::Function(f) => match f {
                 Function::Builtin(_) => "built-in function",
+                Function::UserDefined(_) => "function",
             },
         }
     }

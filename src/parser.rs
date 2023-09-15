@@ -2,7 +2,10 @@ use crate::{
     bracket::{Bracket, BracketSide, BracketStack, BracketType},
     errors::ParserError,
     tokenizer::{Token, TokenType},
-    values::Value,
+    values::{
+        functions::{Function, UserDefinedFunction},
+        Value,
+    },
 };
 use std::cmp::min;
 
@@ -20,7 +23,7 @@ pub enum BinaryOp {
     FunctionCall,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct BinaryOperation {
     pub op: BinaryOp,
     pub left: Box<Expression>,
@@ -33,7 +36,7 @@ pub enum UnaryOp {
     Return,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct UnaryOperation {
     pub op: UnaryOp,
     pub operand: Box<Expression>,
@@ -80,28 +83,28 @@ impl PartialOrd for Op {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Scope {
     pub body: Vec<Expression>,
     pub is_bound: bool,      // = can modify vars from outer scope
     pub is_returnable: bool, // = can be returned from
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct If {
     pub condition: Box<Expression>,
     pub if_true: Box<Expression>,
     pub if_false: Option<Box<Expression>>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct While {
     pub condition: Box<Expression>,
     pub body: Box<Expression>,
     pub if_completed: Option<Box<Expression>>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Expression {
     Value(Box<Value>),
     Variable(String),
@@ -140,7 +143,7 @@ fn consume_expression<'a>(
     tokens: &'a [Token<'a>],
     i: usize,
     prev_op: Option<Op>,
-    terminate_on_unknown_token: bool,
+    terminate_on_unexpected_token: bool,
 ) -> Result<(Expression, usize), ParserError<'a>> {
     let mut result: Option<Expression> = None;
     let mut left: Option<Expression>;
@@ -171,7 +174,7 @@ fn consume_expression<'a>(
                     side: BracketSide::Open,
                 }) => BinaryOp::FunctionCall,
                 _ => {
-                    if terminate_on_unknown_token {
+                    if terminate_on_unexpected_token {
                         return Ok((left, i));
                     }
                     return Err(ParserError {
@@ -197,7 +200,7 @@ fn consume_expression<'a>(
                 tokens,
                 i + next_op_token_count,
                 Some(next_op),
-                terminate_on_unknown_token,
+                terminate_on_unexpected_token,
             )?;
             result = Some(Expression::Bin(BinaryOperation {
                 op: next_binary_op,
@@ -222,7 +225,7 @@ fn consume_expression<'a>(
                 tokens,
                 i + 1,
                 Some(Op::Unary(next_unary_op)),
-                terminate_on_unknown_token,
+                terminate_on_unexpected_token,
             )?;
             result = Some(Expression::Un(UnaryOperation {
                 op: next_unary_op,
@@ -236,6 +239,14 @@ fn consume_operand<'a>(
     tokens: &'a [Token<'a>],
     i: usize,
 ) -> Result<(Option<Expression>, usize), ParserError<'a>> {
+    let advance_if_type = |idx: usize, t: TokenType| {
+        if idx < tokens.len() && tokens[idx].t == t {
+            return idx + 1;
+        } else {
+            idx
+        }
+    };
+
     if i > tokens.len() {
         return Ok((None, i));
     }
@@ -345,16 +356,11 @@ fn consume_operand<'a>(
             let body: Expression;
             (body, j) = consume_expression(tokens, j, None, true)?;
 
-            let possible_else_idx = if j < tokens.len() && tokens[j].t == TokenType::ExprEnd {
-                j + 1
-            } else {
-                j
-            };
-            let body_after_else = if possible_else_idx < tokens.len()
-                && tokens[possible_else_idx].t == TokenType::Else
-            {
+            let possible_else_idx = advance_if_type(j, TokenType::ExprEnd);
+            let possible_else_body_start_idx = advance_if_type(possible_else_idx, TokenType::Else);
+            let body_after_else = if possible_else_body_start_idx > possible_else_idx {
                 let expr: Expression;
-                (expr, j) = consume_expression(tokens, possible_else_idx + 1, None, false)?;
+                (expr, j) = consume_expression(tokens, possible_else_body_start_idx, None, false)?;
                 Some(Box::new(expr))
             } else {
                 None
@@ -373,6 +379,58 @@ fn consume_operand<'a>(
                 })
             };
             Ok((Some(res), j))
+        }
+        TokenType::Func => {
+            let mut j = i + 1;
+            let func_declaration: Expression;
+            (func_declaration, j) = consume_expression(tokens, j, None, true)?;
+            let func_declaration = match func_declaration {
+                Expression::Bin(BinaryOperation {
+                    op: BinaryOp::FunctionCall,
+                    left,
+                    right,
+                }) => match (left.as_ref(), right.as_ref()) {
+                    (Expression::Variable(func_name), Expression::Variable(func_param)) => {
+                        Some((func_name.clone(), func_param.clone()))
+                    }
+                    _ => None,
+                },
+                _ => None,
+            };
+            j = advance_if_type(j, TokenType::ExprEnd);
+
+            if let Some((func_name, func_param)) = func_declaration {
+                let mut func_body: Expression;
+                (func_body, j) = consume_expression(tokens, j, None, false)?;
+                func_body = match func_body {
+                    Expression::Scope(scope) => Expression::Scope(Scope {
+                        body: scope.body,
+                        is_bound: false,
+                        is_returnable: true,
+                    }),
+                    other => other,
+                };
+                return Ok((
+                    Some(Expression::Bin(BinaryOperation {
+                        op: BinaryOp::Assign,
+                        left: Box::new(Expression::Variable(func_name.clone())),
+                        right: Box::new(Expression::Value(Box::new(Value::Function(
+                            Function::UserDefined(UserDefinedFunction {
+                                name: func_name,
+                                arg_name: func_param,
+                                body: func_body,
+                            }),
+                        )))),
+                    })),
+                    j,
+                ));
+            } else {
+                return Err(ParserError {
+                    tokens,
+                    errmsg: "function declaration expected here".into(),
+                    error_token_idx: i + 1,
+                });
+            };
         }
         _ => Ok((None, i)),
     }
