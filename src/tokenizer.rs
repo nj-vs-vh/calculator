@@ -25,6 +25,8 @@ pub enum TokenType {
     LeftAngle,
     RightAngle,
     DoubleEquals,
+    Return,
+    Bang,
 }
 
 #[derive(PartialEq, Eq, Clone)]
@@ -212,6 +214,7 @@ fn match_char(ch: char) -> CharMatch {
     match ch {
         '+' => CharMatch::Token(TokenType::Plus),
         '-' => CharMatch::Token(TokenType::Minus),
+        '!' => CharMatch::Token(TokenType::Bang),
         '*' => CharMatch::Token(TokenType::Star),
         '/' => CharMatch::Token(TokenType::Slash),
         '(' => CharMatch::Token(TokenType::Bracket(Bracket {
@@ -247,6 +250,7 @@ fn match_keyword(lexeme: &str) -> Option<TokenType> {
         "else" => Some(TokenType::Else),
         any_true if any_true.to_lowercase() == "true" => Some(TokenType::BoolLiteral),
         any_false if any_false.to_lowercase() == "false" => Some(TokenType::BoolLiteral),
+        "return" => Some(TokenType::Return),
         _ => None,
     }
 }

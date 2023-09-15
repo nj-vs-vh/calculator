@@ -30,6 +30,7 @@ pub struct BinaryOperation {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum UnaryOp {
     Neg,
+    Return,
 }
 
 #[derive(Debug, Clone)]
@@ -43,7 +44,8 @@ enum Op {
     Binary(BinaryOp),
 }
 
-const ORDER_OF_PRECEDENCE: [Op; 11] = [
+const ORDER_OF_PRECEDENCE: [Op; 12] = [
+    Op::Unary(UnaryOp::Return),
     Op::Binary(BinaryOp::Assign),
     Op::Binary(BinaryOp::IsEq),
     Op::Binary(BinaryOp::IsLt),
@@ -79,6 +81,13 @@ impl PartialOrd for Op {
 }
 
 #[derive(Debug, Clone)]
+pub struct Scope {
+    pub body: Vec<Expression>,
+    pub is_bound: bool,      // = can modify vars from outer scope
+    pub is_returnable: bool, // = can be returned from
+}
+
+#[derive(Debug, Clone)]
 pub struct If {
     pub condition: Box<Expression>,
     pub if_true: Box<Expression>,
@@ -91,20 +100,32 @@ pub enum Expression {
     Variable(String),
     Bin(BinaryOperation),
     Un(UnaryOperation),
-    Scope(Vec<Expression>),
+    Scope(Scope),
     If(If),
 }
 
 pub fn parse<'a>(tokens: &'a [Token<'a>]) -> Result<Expression, ParserError<'a>> {
-    let mut exprs: Vec<Expression> = Vec::new();
+    parse_scope(tokens, false, true)
+}
+
+pub fn parse_scope<'a>(
+    tokens: &'a [Token<'a>],
+    is_bound: bool,
+    is_returnable: bool,
+) -> Result<Expression, ParserError<'a>> {
+    let mut body: Vec<Expression> = Vec::new();
     let mut i = 0;
     while i < tokens.len() {
         let expr: Expression;
         (expr, i) = consume_expression(tokens, i, None, false)?;
         i += 1; // skipping expression end
-        exprs.push(expr);
+        body.push(expr);
     }
-    return Ok(Expression::Scope(exprs));
+    return Ok(Expression::Scope(Scope {
+        body,
+        is_bound,
+        is_returnable,
+    }));
 }
 
 fn consume_expression<'a>(
@@ -147,7 +168,7 @@ fn consume_expression<'a>(
                     }
                     return Err(ParserError {
                         tokens: tokens,
-                        errmsg: "binary operator expected here".into(),
+                        errmsg: "expression end or binary operator expected here".into(),
                         error_token_idx: i,
                     });
                 }
@@ -178,10 +199,12 @@ fn consume_expression<'a>(
         } else {
             let next_unary_op = match tokens[i].t {
                 TokenType::Minus => UnaryOp::Neg,
+                TokenType::Bang => UnaryOp::Neg,
+                TokenType::Return => UnaryOp::Return,
                 _ => {
                     return Err(ParserError {
                         tokens: tokens,
-                        errmsg: "unary operator or an operand expected here".into(),
+                        errmsg: "operand or unary operator expected here".into(),
                         error_token_idx: i,
                     })
                 }
@@ -304,7 +327,7 @@ fn consume_operand<'a>(
                     }
                     expr
                 }
-                BracketType::Curly => parse(bracketed_tokens)?,
+                BracketType::Curly => parse_scope(bracketed_tokens, true, false)?,
             };
             return Ok((Some(bracketed_expr), j));
         }

@@ -6,3 +6,9 @@ res = if (a == b) {
 };
 
 print(res);
+
+if !(a == b) {
+  return "terminated";
+};
+
+"unterminated"

@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::ops::Deref;
 
 use crate::errors::RuntimeError;
 use crate::parser::{BinaryOp, Expression, UnaryOp};
@@ -51,16 +52,25 @@ pub fn eval(
                 });
             }
         }
-        Expression::Scope(scope_expressions) => {
-            if scope_expressions.is_empty() {
+        Expression::Scope(scope) => {
+            if scope.body.is_empty() {
                 return Err(RuntimeError {
                     errmsg: "empty scope".into(),
                 });
             }
             let mut results: Vec<Box<Value>> = Vec::new();
             let mut local_variables = variables.clone();
-            for expr in scope_expressions {
-                results.push(eval(expr, &mut local_variables)?);
+            for expr in scope.body.iter() {
+                let expr_value = eval(expr, &mut local_variables)?;
+                if let Value::Returned(v) = expr_value.clone().deref() {
+                    if scope.is_returnable {
+                        return Ok(v.clone());
+                    } else {
+                        // returned value is passed wrapped up to the first returnable scope
+                        return Ok(expr_value.clone());
+                    }
+                }
+                results.push(expr_value);
             }
             return Ok(results[results.len() - 1].clone());
         }
@@ -105,6 +115,7 @@ pub fn eval(
             let operand = eval(&unary_operation.operand, variables)?;
             match unary_operation.op {
                 UnaryOp::Neg => apply_un!(neg, operand, "negation"),
+                UnaryOp::Return => Ok(Box::new(Value::Returned(operand))),
             }
         }
         Expression::If(if_) => {
@@ -276,6 +287,10 @@ mod tests {
     #[case("if false 1 else 2", Value::Int(2))]
     #[case("a = 3; b = 5; res = if a < b 1 else 2; res", Value::Int(1))]
     #[case("a = 3; b = 5; res = if (a < b) { 1 } else { 2 }; res", Value::Int(1))]
+    #[case("return 1; 2; 3; 4; 5; 6;", Value::Int(1))]
+    #[case("if !(1 == 2) {return 1}; return 2", Value::Int(1))]
+    #[case("if (1 == 2) {return 1}; return 2", Value::Int(2))]
+    #[case("if (1 == 2) {return 1}; 2;", Value::Int(2))]
     fn test_runtime_basic(#[case] code: &str, #[case] expected_result: Value) {
         let code_ = String::from(code);
         let tokens = tokenize(&code_).unwrap();

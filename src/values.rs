@@ -11,12 +11,14 @@ pub enum Value {
     String(String),
     Bool(bool),
     Function(Function),
+    Returned(Box<Value>),
 }
 
 impl Value {
     pub fn type_name(&self) -> &str {
         match self {
             Value::Nothing => "nothing",
+            Value::Returned(_) => "returned value",
             Value::Int(_) => "integer",
             Value::Float(_) => "floating point number",
             Value::String(_) => "string",
@@ -31,6 +33,7 @@ impl Value {
 impl Display for Value {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            Value::Returned(v) => write!(f, "returned {}", v),
             Value::Nothing => write!(f, "nothing"),
             Value::Int(v) => write!(f, "{}", v),
             Value::Float(v) => write!(f, "{}", v),
