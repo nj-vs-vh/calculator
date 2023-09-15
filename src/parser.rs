@@ -95,6 +95,13 @@ pub struct If {
 }
 
 #[derive(Debug, Clone)]
+pub struct While {
+    pub condition: Box<Expression>,
+    pub body: Box<Expression>,
+    pub if_completed: Option<Box<Expression>>,
+}
+
+#[derive(Debug, Clone)]
 pub enum Expression {
     Value(Box<Value>),
     Variable(String),
@@ -102,6 +109,7 @@ pub enum Expression {
     Un(UnaryOperation),
     Scope(Scope),
     If(If),
+    While(While),
 }
 
 pub fn parse<'a>(tokens: &'a [Token<'a>]) -> Result<Expression, ParserError<'a>> {
@@ -307,11 +315,7 @@ fn consume_operand<'a>(
 
             let bracketed_tokens = &tokens[i + 1..j - 1];
             if bracketed_tokens.len() == 0 {
-                return Err(ParserError {
-                    tokens: tokens,
-                    errmsg: "empty brackets".into(),
-                    error_token_idx: i,
-                });
+                return Ok((Some(Expression::Value(Box::new(Value::Nothing))), j));
             }
 
             let bracketed_expr = match bracket_type {
@@ -331,37 +335,44 @@ fn consume_operand<'a>(
             };
             return Ok((Some(bracketed_expr), j));
         }
-        TokenType::If => {
+        t if t == TokenType::If || t == TokenType::While => {
             let mut j = i + 1;
-            let conditon_expr: Expression;
-            (conditon_expr, j) = consume_expression(tokens, j, None, true)?;
+            let condition: Expression;
+            (condition, j) = consume_expression(tokens, j, None, true)?;
             if tokens[j].t == TokenType::ExprEnd {
                 j += 1;
             }
-            let if_true_expr: Expression;
-            (if_true_expr, j) = consume_expression(tokens, j, None, true)?;
+            let body: Expression;
+            (body, j) = consume_expression(tokens, j, None, true)?;
 
-            let maybe_else_pos = if tokens[j].t == TokenType::ExprEnd {
+            let possible_else_idx = if j < tokens.len() && tokens[j].t == TokenType::ExprEnd {
                 j + 1
             } else {
                 j
             };
-            let if_false_expr =
-                if maybe_else_pos < tokens.len() && tokens[maybe_else_pos].t == TokenType::Else {
-                    let expr: Expression;
-                    (expr, j) = consume_expression(tokens, maybe_else_pos + 1, None, false)?;
-                    Some(Box::new(expr))
-                } else {
-                    None
-                };
-            Ok((
-                Some(Expression::If(If {
-                    condition: Box::new(conditon_expr),
-                    if_true: Box::new(if_true_expr),
-                    if_false: if_false_expr,
-                })),
-                j,
-            ))
+            let body_after_else = if possible_else_idx < tokens.len()
+                && tokens[possible_else_idx].t == TokenType::Else
+            {
+                let expr: Expression;
+                (expr, j) = consume_expression(tokens, possible_else_idx + 1, None, false)?;
+                Some(Box::new(expr))
+            } else {
+                None
+            };
+            let res = if t == TokenType::If {
+                Expression::If(If {
+                    condition: Box::new(condition),
+                    if_true: Box::new(body),
+                    if_false: body_after_else,
+                })
+            } else {
+                Expression::While(While {
+                    condition: Box::new(condition),
+                    body: Box::new(body),
+                    if_completed: body_after_else,
+                })
+            };
+            Ok((Some(res), j))
         }
         _ => Ok((None, i)),
     }

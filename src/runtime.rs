@@ -59,9 +59,17 @@ pub fn eval(
                 });
             }
             let mut results: Vec<Box<Value>> = Vec::new();
-            let mut local_variables = variables.clone();
+            let mut variables_clone = if scope.is_bound {
+                None
+            } else {
+                Some(variables.clone())
+            };
             for expr in scope.body.iter() {
-                let expr_value = eval(expr, &mut local_variables)?;
+                let expr_value = if let Some(cloned_variables) = &mut variables_clone {
+                    eval(expr, cloned_variables)?
+                } else {
+                    eval(expr, variables)?
+                };
                 if let Value::Returned(v) = expr_value.clone().deref() {
                     if scope.is_returnable {
                         return Ok(v.clone());
@@ -137,6 +145,29 @@ pub fn eval(
                 })
             }
         }
+        Expression::While(while_) => {
+            let mut last_result = Box::new(Value::Nothing);
+            loop {
+                let condition = eval(&while_.condition, variables)?;
+                if let Value::Bool(run_loop_iteration) = condition.clone().as_ref() {
+                    if *run_loop_iteration {
+                        last_result = eval(&while_.body, variables)?;
+                        if let Value::Returned(_) = last_result.clone().as_ref() {
+                            return Ok(last_result);
+                        }
+                    } else {
+                        return Ok(last_result);
+                    }
+                } else {
+                    return Err(RuntimeError {
+                        errmsg: format!(
+                            "while loop condition must evaluate to bool, got {}",
+                            condition.type_name()
+                        ),
+                    });
+                }
+            }
+        }
     }
 }
 
@@ -170,6 +201,7 @@ fn mul(a: &Value, b: &Value) -> Option<Value> {
         (Value::Int(i1), Value::Float(f2)) => Some(Value::Float(*i1 as f32 * *f2)),
         (Value::Float(_), Value::Int(_)) => mul(b, a),
         (Value::Int(i1), Value::Int(i2)) => Some(Value::Int(i1 * i2)),
+        (Value::String(s), Value::Int(i)) => Some(Value::String(s.repeat(*i as usize))),
         (Value::Bool(b1), Value::Bool(b2)) => Some(Value::Bool(*b1 && *b2)),
         _ => None,
     }
@@ -240,6 +272,10 @@ mod tests {
     use rstest::rstest;
 
     #[rstest]
+    #[case("()", Value::Nothing)]
+    #[case("();", Value::Nothing)]
+    #[case("{};", Value::Nothing)]
+    #[case("a = {};a", Value::Nothing)]
     #[case("1", Value::Int(1))]
     #[case("1;", Value::Int(1))]
     #[case("(1);", Value::Int(1))]
@@ -292,6 +328,11 @@ mod tests {
     #[case("if !(1 == 2) {return 1}; return 2", Value::Int(1))]
     #[case("if (1 == 2) {return 1}; return 2", Value::Int(2))]
     #[case("if (1 == 2) {return 1}; 2;", Value::Int(2))]
+    #[case("while (1 == 2) {};", Value::Nothing)]
+    #[case(
+        "a = 1; while true { str = \"b\" * a; a = a + 1; print(str); if length(str) > 5 { return str; } };",
+        Value::String("bbbbbb".into())
+    )]
     fn test_runtime_basic(#[case] code: &str, #[case] expected_result: Value) {
         let code_ = String::from(code);
         let tokens = tokenize(&code_).unwrap();

@@ -29,7 +29,10 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    Fmt,
+    Fmt {
+        #[arg(short, long)]
+        minified: bool,
+    },
 }
 
 fn main() {
@@ -49,8 +52,8 @@ fn main() {
         println!("Tokens:\n{:?}", &tokens);
     }
 
-    if let Some(Commands::Fmt) = args.command {
-        let formatted = untokenize(&tokens, false);
+    if let Some(Commands::Fmt { minified }) = args.command {
+        let formatted = untokenize(&tokens, minified);
         fs::write(&args.filename, formatted).expect("Failed to write formatted code to file");
         return;
     }

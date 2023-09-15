@@ -1,14 +1,9 @@
-a = 1;
-b = 2;
-res = if (a == b) {
-  print("equal");
-  10
+n = 1;
+while true {
+  str = "A" * n;
+  n = n + 1;
+  print(str);
+  if length(str) > 30 {
+    return str;
+  }
 };
-
-print(res);
-
-if !(a == b) {
-  return "terminated";
-};
-
-"unterminated"
