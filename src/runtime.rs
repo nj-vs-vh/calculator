@@ -52,17 +52,20 @@ pub fn eval(
                 });
             }
         }
-        Expression::Scope(scope) => {
-            if scope.body.is_empty() {
+        Expression::Scope {
+            body,
+            is_returnable,
+        } => {
+            if body.is_empty() {
                 return Err(RuntimeError {
                     errmsg: "empty scope".into(),
                 });
             }
             let mut results: Vec<Box<Value>> = Vec::new();
-            for expr in scope.body.iter() {
+            for expr in body.iter() {
                 let expr_value = eval(expr, vars)?;
                 if let Value::Returned(v) = expr_value.clone().deref() {
-                    if scope.is_returnable {
+                    if *is_returnable {
                         return Ok(v.clone());
                     } else {
                         // returned value is passed wrapped up to the first returnable scope
@@ -73,10 +76,10 @@ pub fn eval(
             }
             return Ok(results[results.len() - 1].clone());
         }
-        Expression::Bin(binary_operation) => {
-            let right_value = eval(&binary_operation.right, vars)?;
-            if binary_operation.op == BinaryOp::Assign {
-                if let Expression::Variable(var_name) = binary_operation.left.clone().as_ref() {
+        Expression::BinaryOperation { op, left, right } => {
+            let right_value = eval(&right, vars)?;
+            if let BinaryOp::Assign = op {
+                if let Expression::Variable(var_name) = left.clone().as_ref() {
                     vars.insert(var_name.clone(), right_value.clone());
                     return Ok(right_value);
                 } else {
@@ -85,8 +88,8 @@ pub fn eval(
                     });
                 };
             }
-            let left_value = eval(&binary_operation.left, vars)?;
-            match binary_operation.op {
+            let left_value = eval(&left, vars)?;
+            match op {
                 BinaryOp::Add => apply_bin!(add, left_value, right_value, "addition"),
                 BinaryOp::Sub => apply_bin!(sub, left_value, right_value, "subtraction"),
                 BinaryOp::Mul => apply_bin!(mul, left_value, right_value, "multiplication"),
@@ -95,6 +98,7 @@ pub fn eval(
                 BinaryOp::IsEq => apply_bin!(eq, left_value, right_value, "equality"),
                 BinaryOp::IsLt => apply_bin!(lt, left_value, right_value, "less-than"),
                 BinaryOp::IsGt => apply_bin!(gt, left_value, right_value, "greater-than"),
+                BinaryOp::FormTuple => Ok(Box::new(Value::Tuple(vec![left_value, right_value]))),
                 BinaryOp::FunctionCall => {
                     if let Value::Function(func) = left_value.clone().as_ref() {
                         match func.call(right_value, &vars) {
@@ -107,22 +111,26 @@ pub fn eval(
                         })
                     }
                 }
-                BinaryOp::Assign => panic!("rtl assign"),
+                BinaryOp::Assign => panic!("LTR assign"),
             }
         }
-        Expression::Un(unary_operation) => {
-            let operand = eval(&unary_operation.operand, vars)?;
-            match unary_operation.op {
+        Expression::UnaryOperation { op, operand } => {
+            let operand = eval(&operand, vars)?;
+            match op {
                 UnaryOp::Neg => apply_un!(neg, operand, "negation"),
                 UnaryOp::Return => Ok(Box::new(Value::Returned(operand))),
             }
         }
-        Expression::If(if_) => {
-            let condition = eval(&if_.condition, vars)?;
+        Expression::If {
+            condition,
+            if_true,
+            if_false,
+        } => {
+            let condition = eval(&condition, vars)?;
             if let Value::Bool(b) = condition.clone().as_ref() {
                 if *b {
-                    Ok(eval(&if_.if_true, vars)?)
-                } else if let Some(if_false_expr) = if_.if_false.clone() {
+                    Ok(eval(&if_true, vars)?)
+                } else if let Some(if_false_expr) = if_false.clone() {
                     Ok(eval(&if_false_expr, vars)?)
                 } else {
                     Ok(Box::new(Value::Nothing))
@@ -136,13 +144,17 @@ pub fn eval(
                 })
             }
         }
-        Expression::While(while_) => {
+        Expression::While {
+            condition,
+            body,
+            if_completed: _, // TBD
+        } => {
             let mut last_result = Box::new(Value::Nothing);
             loop {
-                let condition = eval(&while_.condition, vars)?;
+                let condition = eval(&condition, vars)?;
                 if let Value::Bool(run_loop_iteration) = condition.clone().as_ref() {
                     if *run_loop_iteration {
-                        last_result = eval(&while_.body, vars)?;
+                        last_result = eval(&body, vars)?;
                         if let Value::Returned(_) = last_result.clone().as_ref() {
                             return Ok(last_result);
                         }

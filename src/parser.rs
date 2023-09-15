@@ -21,13 +21,7 @@ pub enum BinaryOp {
     IsGt,
     IsLt,
     FunctionCall,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct BinaryOperation {
-    pub op: BinaryOp,
-    pub left: Box<Expression>,
-    pub right: Box<Expression>,
+    FormTuple,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -36,19 +30,15 @@ pub enum UnaryOp {
     Return,
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub struct UnaryOperation {
-    pub op: UnaryOp,
-    pub operand: Box<Expression>,
-}
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 enum Op {
     Unary(UnaryOp),
     Binary(BinaryOp),
 }
 
-const ORDER_OF_PRECEDENCE: [Op; 12] = [
+const ORDER_OF_PRECEDENCE: [Op; 13] = [
     Op::Unary(UnaryOp::Return),
+    Op::Binary(BinaryOp::FormTuple),
     Op::Binary(BinaryOp::Assign),
     Op::Binary(BinaryOp::IsEq),
     Op::Binary(BinaryOp::IsLt),
@@ -84,34 +74,32 @@ impl PartialOrd for Op {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct Scope {
-    pub body: Vec<Expression>,
-    pub is_returnable: bool, // = can be returned from
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct If {
-    pub condition: Box<Expression>,
-    pub if_true: Box<Expression>,
-    pub if_false: Option<Box<Expression>>,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct While {
-    pub condition: Box<Expression>,
-    pub body: Box<Expression>,
-    pub if_completed: Option<Box<Expression>>,
-}
-
-#[derive(Debug, Clone, PartialEq)]
 pub enum Expression {
     Value(Box<Value>),
     Variable(String),
-    Bin(BinaryOperation),
-    Un(UnaryOperation),
-    Scope(Scope),
-    If(If),
-    While(While),
+    BinaryOperation {
+        op: BinaryOp,
+        left: Box<Expression>,
+        right: Box<Expression>,
+    },
+    UnaryOperation {
+        op: UnaryOp,
+        operand: Box<Expression>,
+    },
+    Scope {
+        body: Vec<Expression>,
+        is_returnable: bool, // = can be returned from
+    },
+    If {
+        condition: Box<Expression>,
+        if_true: Box<Expression>,
+        if_false: Option<Box<Expression>>,
+    },
+    While {
+        condition: Box<Expression>,
+        body: Box<Expression>,
+        if_completed: Option<Box<Expression>>,
+    },
 }
 
 pub fn parse<'a>(tokens: &'a [Token<'a>]) -> Result<Expression, ParserError<'a>> {
@@ -130,10 +118,10 @@ pub fn parse_scope<'a>(
         i += 1; // skipping expression end
         body.push(expr);
     }
-    return Ok(Expression::Scope(Scope {
+    return Ok(Expression::Scope {
         body,
         is_returnable,
-    }));
+    });
 }
 
 fn consume_expression<'a>(
@@ -166,6 +154,7 @@ fn consume_expression<'a>(
                 TokenType::DoubleEquals => BinaryOp::IsEq,
                 TokenType::LeftAngle => BinaryOp::IsLt,
                 TokenType::RightAngle => BinaryOp::IsGt,
+                TokenType::Comma => BinaryOp::FormTuple,
                 TokenType::Bracket(Bracket {
                     type_: BracketType::Round,
                     side: BracketSide::Open,
@@ -199,11 +188,11 @@ fn consume_expression<'a>(
                 Some(next_op),
                 terminate_on_unexpected_token,
             )?;
-            result = Some(Expression::Bin(BinaryOperation {
+            result = Some(Expression::BinaryOperation {
                 op: next_binary_op,
                 left: Box::new(left),
                 right: Box::new(right),
-            }));
+            });
         } else {
             let next_unary_op = match tokens[i].t {
                 TokenType::Minus => UnaryOp::Neg,
@@ -224,10 +213,10 @@ fn consume_expression<'a>(
                 Some(Op::Unary(next_unary_op)),
                 terminate_on_unexpected_token,
             )?;
-            result = Some(Expression::Un(UnaryOperation {
+            result = Some(Expression::UnaryOperation {
                 op: next_unary_op,
                 operand: Box::new(operand),
-            }))
+            })
         }
     }
 }
@@ -363,17 +352,17 @@ fn consume_operand<'a>(
                 None
             };
             let res = if t == TokenType::If {
-                Expression::If(If {
+                Expression::If {
                     condition: Box::new(condition),
                     if_true: Box::new(body),
                     if_false: body_after_else,
-                })
+                }
             } else {
-                Expression::While(While {
+                Expression::While {
                     condition: Box::new(condition),
                     body: Box::new(body),
                     if_completed: body_after_else,
-                })
+                }
             };
             Ok((Some(res), j))
         }
@@ -382,11 +371,11 @@ fn consume_operand<'a>(
             let func_declaration: Expression;
             (func_declaration, j) = consume_expression(tokens, j, None, true)?;
             let func_declaration = match func_declaration {
-                Expression::Bin(BinaryOperation {
+                Expression::BinaryOperation {
                     op: BinaryOp::FunctionCall,
                     left,
                     right,
-                }) => match (left.as_ref(), right.as_ref()) {
+                } => match (left.as_ref(), right.as_ref()) {
                     (Expression::Variable(func_name), Expression::Variable(func_param)) => {
                         Some((func_name.clone(), func_param.clone()))
                     }
@@ -400,14 +389,17 @@ fn consume_operand<'a>(
                 let mut func_body: Expression;
                 (func_body, j) = consume_expression(tokens, j, None, false)?;
                 func_body = match func_body {
-                    Expression::Scope(scope) => Expression::Scope(Scope {
-                        body: scope.body,
+                    Expression::Scope {
+                        body,
+                        is_returnable: _,
+                    } => Expression::Scope {
+                        body: body,
                         is_returnable: true,
-                    }),
+                    },
                     other => other,
                 };
                 return Ok((
-                    Some(Expression::Bin(BinaryOperation {
+                    Some(Expression::BinaryOperation {
                         op: BinaryOp::Assign,
                         left: Box::new(Expression::Variable(func_name.clone())),
                         right: Box::new(Expression::Value(Box::new(Value::Function(
@@ -417,7 +409,7 @@ fn consume_operand<'a>(
                                 body: func_body,
                             }),
                         )))),
-                    })),
+                    }),
                     j,
                 ));
             } else {

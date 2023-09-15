@@ -11,6 +11,8 @@ pub enum Value {
     String(String),
     Bool(bool),
     Function(Function),
+    Tuple(Vec<Box<Value>>),
+    // service values for control flow
     Returned(Box<Value>),
 }
 
@@ -23,6 +25,7 @@ impl Value {
             Value::Float(_) => "floating point number",
             Value::String(_) => "string",
             Value::Bool(_) => "bool",
+            Value::Tuple(_) => "tuple",
             Value::Function(f) => match f {
                 Function::Builtin(_) => "built-in function",
                 Function::UserDefined(_) => "function",
@@ -40,6 +43,17 @@ impl Display for Value {
             Value::Float(v) => write!(f, "{}", v),
             Value::String(s) => write!(f, "\"{}\"", s),
             Value::Bool(v) => write!(f, "{}", if *v { "True" } else { "False" }),
+            Value::Tuple(vec) => {
+                write!(f, "(")?;
+                for (idx, elem) in vec.iter().enumerate() {
+                    write!(f, "{}", elem)?;
+                    if idx < vec.len() - 1 {
+                        write!(f, ", ")?;
+                    }
+                }
+                write!(f, ")")?;
+                Ok(())
+            }
             _ => write!(f, "{:?}", self),
         }
     }
