@@ -39,8 +39,8 @@ enum Op {
 
 const ORDER_OF_PRECEDENCE: [Op; 13] = [
     Op::Unary(UnaryOp::Return),
-    Op::Binary(BinaryOp::FormTuple),
     Op::Binary(BinaryOp::Assign),
+    Op::Binary(BinaryOp::FormTuple),
     Op::Binary(BinaryOp::IsEq),
     Op::Binary(BinaryOp::IsLt),
     Op::Binary(BinaryOp::IsGt),

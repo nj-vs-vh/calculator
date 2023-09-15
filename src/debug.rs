@@ -35,7 +35,7 @@ fn format_tree(expr: &Expression) -> String {
         Expression::Scope {
             body,
             is_returnable: _,
-        } => format_subexpressions("┬── scope ───", body.iter(), body.len()),
+        } => format_subexpressions("┬ Scope ─", body.iter(), body.len()),
         Expression::If {
             condition,
             if_true,

@@ -77,17 +77,10 @@ pub fn eval(
             return Ok(results[results.len() - 1].clone());
         }
         Expression::BinaryOperation { op, left, right } => {
-            let right_value = eval(&right, vars)?;
             if let BinaryOp::Assign = op {
-                if let Expression::Variable(var_name) = left.clone().as_ref() {
-                    vars.insert(var_name.clone(), right_value.clone());
-                    return Ok(right_value);
-                } else {
-                    return Err(RuntimeError {
-                        errmsg: format!("can only assign to variables"),
-                    });
-                };
+                return eval_assignment(&left, &right, vars);
             }
+            let right_value = eval(&right, vars)?;
             let left_value = eval(&left, vars)?;
             match op {
                 BinaryOp::Add => apply_bin!(add, left_value, right_value, "addition"),
@@ -182,6 +175,78 @@ pub fn eval(
                 }
             }
         }
+    }
+}
+
+fn eval_assignment(
+    left: &Expression,
+    right: &Expression,
+    vars: &mut HashMap<String, Box<Value>>,
+) -> Result<Box<Value>, RuntimeError> {
+    if let Expression::Variable(var_name) = left {
+        let right_value = eval(right, vars)?;
+        vars.insert(var_name.clone(), right_value.clone());
+        Ok(right_value)
+    } else if let Expression::BinaryOperation {
+        op: op_left,
+        left: ll,
+        right: rl,
+    } = left
+    {
+        if let Expression::BinaryOperation {
+            op: op_right,
+            left: lr,
+            right: rr,
+        } = right
+        {
+            if op_left != op_right {
+                return Err(RuntimeError{errmsg: format!("right-hand side of the assignment doesn't match the pattern, expected binary operation {:?}", op_left)});
+            }
+            let res_left = eval_assignment(ll, lr, vars)?;
+            let res_right = eval_assignment(rl, rr, vars)?;
+            return eval(
+                &Expression::BinaryOperation {
+                    op: *op_left,
+                    left: Box::new(Expression::Value(res_left)),
+                    right: Box::new(Expression::Value(res_right)),
+                },
+                vars,
+            );
+        } else {
+            Err(RuntimeError {
+                errmsg: "right-hand side of the assignment doesn't match the pattern, expected binary operation".into(),
+            })
+        }
+    } else if let Expression::UnaryOperation {
+        op: op_left,
+        operand: operand_left,
+    } = left
+    {
+        if let Expression::UnaryOperation {
+            op: op_right,
+            operand: operand_right,
+        } = right
+        {
+            if op_left != op_right {
+                return Err(RuntimeError{errmsg: format!("right-hand side of the assignment doesn't match the pattern, expected unary operation {:?}", op_left)});
+            }
+            let res_operand = eval_assignment(&operand_left, &operand_right, vars)?;
+            return eval(
+                &Expression::UnaryOperation {
+                    op: *op_left,
+                    operand: Box::new(Expression::Value(res_operand)),
+                },
+                vars,
+            );
+        } else {
+            Err(RuntimeError {
+                errmsg: "right-hand side of the assignment doesn't match the pattern, expected unary operation".into(),
+            })
+        }
+    } else {
+        Err(RuntimeError {
+            errmsg: "assignment is only possible to a variable or a simple expression".into(),
+        })
     }
 }
 
@@ -375,6 +440,13 @@ mod tests {
         ])),
         Box::new(Value::Int(3)),
     ]))]
+    #[case("a, b = 1, 2", Value::Tuple(vec![Box::new(Value::Int(1)), Box::new(Value::Int(2))]))]
+    #[case("-b = -1; b", Value::Int(1))]
+    #[case("a = -b = -1; a", Value::Int(-1))]
+    #[case("tup = a, b = 1, 2; tup", Value::Tuple(vec![Box::new(Value::Int(1)), Box::new(Value::Int(2))]))]
+    #[case("a, b = 1, 2; a + b", Value::Int(3))]
+    #[case("a, (b, c) = 1, (2, 3); a + b + c", Value::Int(6))]
+    #[case("sum = a + b = 3 + 7; a", Value::Int(3))]
     fn test_runtime_basic(#[case] code: &str, #[case] expected_result: Value) {
         let code_ = String::from(code);
         let tokens = tokenize(&code_).unwrap();
