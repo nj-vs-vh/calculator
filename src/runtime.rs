@@ -288,6 +288,7 @@ mod tests {
     #[case("a = 3; b = 5; res = if a < b 1 else 2; res", Value::Int(1))]
     #[case("a = 3; b = 5; res = if (a < b) { 1 } else { 2 }; res", Value::Int(1))]
     #[case("return 1; 2; 3; 4; 5; 6;", Value::Int(1))]
+    #[case("return return 1", Value::Returned(Box::new(Value::Int(1))))]
     #[case("if !(1 == 2) {return 1}; return 2", Value::Int(1))]
     #[case("if (1 == 2) {return 1}; return 2", Value::Int(2))]
     #[case("if (1 == 2) {return 1}; 2;", Value::Int(2))]
