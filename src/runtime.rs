@@ -4,10 +4,11 @@ use std::ops::Deref;
 use crate::errors::RuntimeError;
 use crate::parser::{BinaryOp, Expression, UnaryOp};
 use crate::values::builtins::builtin;
+use crate::values::function::Function;
 use crate::values::Value;
 
 macro_rules! apply_bin {
-    ( $func:expr, $left:expr, $right:expr, $op_name:expr ) => {{
+    ( $func:expr, $left:expr, $right:expr, $op_name:expr, $parent:expr ) => {{
         let maybe_res = $func(&$left, &$right);
         match maybe_res {
             Some(v) => Ok(Box::new(v)),
@@ -18,28 +19,30 @@ macro_rules! apply_bin {
                     $left.type_name(),
                     $right.type_name()
                 ),
+                expression: $parent.clone(),
             }),
         }
     }};
 }
 
 macro_rules! apply_un {
-    ( $func:expr, $left:expr, $op_name:expr ) => {{
+    ( $func:expr, $left:expr, $op_name:expr, $parent:expr ) => {{
         let maybe_res = $func(&$left);
         match maybe_res {
             Some(v) => Ok(Box::new(v)),
             None => Err(RuntimeError {
                 errmsg: format!("{} is not defined for {}", $op_name, $left.type_name(),),
+                expression: $parent.clone(),
             }),
         }
     }};
 }
 
 pub fn eval(
-    expr: &Expression,
+    expression: &Expression,
     vars: &mut HashMap<String, Box<Value>>,
 ) -> Result<Box<Value>, RuntimeError> {
-    match expr {
+    match expression {
         Expression::Value(v) => Ok(v.clone()),
         Expression::Variable(var_name) => {
             if let Some(value) = vars.get(var_name).map(|ref_| ref_.clone()) {
@@ -49,6 +52,7 @@ pub fn eval(
             } else {
                 return Err(RuntimeError {
                     errmsg: format!("reference to non-existent variable \"{}\"", var_name),
+                    expression: expression.clone(),
                 });
             }
         }
@@ -75,14 +79,40 @@ pub fn eval(
             return Ok(results[results.len() - 1].clone());
         }
         Expression::BinaryOperation { op, left, right } => match op {
-            BinaryOp::Assign => eval_assignment(&left, &right, vars),
+            BinaryOp::Assign => {
+                eval_assignment(&left, &right, vars).map_err(|errmsg| RuntimeError {
+                    errmsg,
+                    expression: expression.clone(),
+                })
+            }
             BinaryOp::FunctionCall => {
                 let left_value = eval(&left, vars)?;
-                if let Value::Function(func) = left_value.clone().as_ref() {
-                    func.call(right, &vars)
+                if let Value::Function(func) = left_value.as_ref() {
+                    match func {
+                        Function::Builtin(builtin_func) => {
+                            let arg_value = eval(&right, vars)?;
+                            builtin_func(&arg_value).map(|v| Box::new(v)).map_err(|e| {
+                                RuntimeError {
+                                    errmsg: e,
+                                    expression: expression.clone(),
+                                }
+                            })
+                        }
+                        Function::UserDefined(func) => {
+                            let mut local_vars = vars.clone();
+                            eval_assignment(&func.params, &right, &mut local_vars).map_err(
+                                |errmsg| RuntimeError {
+                                    errmsg,
+                                    expression: expression.clone(),
+                                },
+                            )?;
+                            eval(&func.body, &mut local_vars)
+                        }
+                    }
                 } else {
                     Err(RuntimeError {
                         errmsg: "not callable".into(),
+                        expression: expression.clone(),
                     })
                 }
             }
@@ -90,14 +120,28 @@ pub fn eval(
                 let right_value = eval(&right, vars)?;
                 let left_value = eval(&left, vars)?;
                 match ltr_op {
-                    BinaryOp::Add => apply_bin!(add, left_value, right_value, "addition"),
-                    BinaryOp::Sub => apply_bin!(sub, left_value, right_value, "subtraction"),
-                    BinaryOp::Mul => apply_bin!(mul, left_value, right_value, "multiplication"),
-                    BinaryOp::Div => apply_bin!(div, left_value, right_value, "division"),
-                    BinaryOp::Pow => apply_bin!(pow, left_value, right_value, "power"),
-                    BinaryOp::IsEq => apply_bin!(eq, left_value, right_value, "equality"),
-                    BinaryOp::IsLt => apply_bin!(lt, left_value, right_value, "less-than"),
-                    BinaryOp::IsGt => apply_bin!(gt, left_value, right_value, "greater-than"),
+                    BinaryOp::Add => {
+                        apply_bin!(add, left_value, right_value, "addition", expression)
+                    }
+                    BinaryOp::Sub => {
+                        apply_bin!(sub, left_value, right_value, "subtraction", expression)
+                    }
+                    BinaryOp::Mul => {
+                        apply_bin!(mul, left_value, right_value, "multiplication", expression)
+                    }
+                    BinaryOp::Div => {
+                        apply_bin!(div, left_value, right_value, "division", expression)
+                    }
+                    BinaryOp::Pow => apply_bin!(pow, left_value, right_value, "power", expression),
+                    BinaryOp::IsEq => {
+                        apply_bin!(eq, left_value, right_value, "equality", expression)
+                    }
+                    BinaryOp::IsLt => {
+                        apply_bin!(lt, left_value, right_value, "less-than", expression)
+                    }
+                    BinaryOp::IsGt => {
+                        apply_bin!(gt, left_value, right_value, "greater-than", expression)
+                    }
                     BinaryOp::FormTuple => {
                         Ok(Box::new(Value::Tuple(vec![left_value, right_value])))
                     }
@@ -109,6 +153,7 @@ pub fn eval(
                         } else {
                             Err(RuntimeError {
                                 errmsg: "internal error: can't append to non-tuple value".into(),
+                                expression: expression.clone(),
                             })
                         }
                     }
@@ -119,7 +164,7 @@ pub fn eval(
         Expression::UnaryOperation { op, operand } => {
             let operand = eval(&operand, vars)?;
             match op {
-                UnaryOp::Neg => apply_un!(neg, operand, "negation"),
+                UnaryOp::Neg => apply_un!(neg, operand, "negation", expression),
                 UnaryOp::Return => Ok(Box::new(Value::Returned(operand))),
             }
         }
@@ -132,7 +177,7 @@ pub fn eval(
             if let Value::Bool(b) = condition.clone().as_ref() {
                 if *b {
                     Ok(eval(&if_true, vars)?)
-                } else if let Some(if_false_expr) = if_false.clone() {
+                } else if let Some(if_false_expr) = if_false {
                     Ok(eval(&if_false_expr, vars)?)
                 } else {
                     Ok(Box::new(Value::Nothing))
@@ -143,6 +188,7 @@ pub fn eval(
                         "if condition must evaluate to bool, got {}",
                         condition.type_name()
                     ),
+                    expression: expression.clone(),
                 })
             }
         }
@@ -169,6 +215,7 @@ pub fn eval(
                             "while loop condition must evaluate to bool, got {}",
                             condition.type_name()
                         ),
+                        expression: expression.clone(),
                     });
                 }
             }
@@ -180,9 +227,9 @@ pub fn eval_assignment(
     left: &Expression,
     right: &Expression,
     vars: &mut HashMap<String, Box<Value>>,
-) -> Result<Box<Value>, RuntimeError> {
+) -> Result<Box<Value>, String> {
     if let Expression::Variable(var_name) = left {
-        let right_value = eval(right, vars)?;
+        let right_value = eval(right, vars).map_err(|e| e.errmsg)?;
         vars.insert(var_name.clone(), right_value.clone());
         Ok(right_value)
     } else if let Expression::BinaryOperation {
@@ -198,7 +245,7 @@ pub fn eval_assignment(
         } = right
         {
             if op_left != op_right {
-                return Err(RuntimeError{errmsg: format!("right-hand side of the assignment doesn't match the pattern, expected binary operation {:?}", op_left)});
+                return Err(format!("right-hand side of the assignment doesn't match the pattern, expected binary operation {:?}", op_left));
             }
             let res_left = eval_assignment(ll, lr, vars)?;
             let res_right = eval_assignment(rl, rr, vars)?;
@@ -209,11 +256,12 @@ pub fn eval_assignment(
                     right: Box::new(Expression::Value(res_right)),
                 },
                 vars,
-            );
+            )
+            .map_err(|e| e.errmsg);
         } else {
-            Err(RuntimeError {
-                errmsg: "right-hand side of the assignment doesn't match the pattern, expected binary operation".into(),
-            })
+            Err(
+                "right-hand side of the assignment doesn't match the pattern, expected binary operation".into(),
+            )
         }
     } else if let Expression::UnaryOperation {
         op: op_left,
@@ -226,7 +274,7 @@ pub fn eval_assignment(
         } = right
         {
             if op_left != op_right {
-                return Err(RuntimeError{errmsg: format!("right-hand side of the assignment doesn't match the pattern, expected unary operation {:?}", op_left)});
+                return Err(format!("right-hand side of the assignment doesn't match the pattern, expected unary operation {:?}", op_left));
             }
             let res_operand = eval_assignment(&operand_left, &operand_right, vars)?;
             return eval(
@@ -235,16 +283,15 @@ pub fn eval_assignment(
                     operand: Box::new(Expression::Value(res_operand)),
                 },
                 vars,
-            );
+            )
+            .map_err(|e| e.errmsg);
         } else {
-            Err(RuntimeError {
-                errmsg: "right-hand side of the assignment doesn't match the pattern, expected unary operation".into(),
-            })
+            Err(
+                "right-hand side of the assignment doesn't match the pattern, expected unary operation".into(),
+            )
         }
     } else {
-        Err(RuntimeError {
-            errmsg: "assignment is only possible to a variable or a simple expression".into(),
-        })
+        Err("assignment is only possible to a variable or a simple expression".into())
     }
 }
 

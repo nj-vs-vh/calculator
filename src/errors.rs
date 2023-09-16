@@ -1,5 +1,7 @@
 use std::{error::Error, fmt::Display};
 
+use crate::debug::format_tree;
+use crate::parser::Expression;
 use crate::tokenizer::untokenize;
 use crate::tokenizer::Token;
 use crate::tokenizer::TokenType;
@@ -134,12 +136,18 @@ impl Display for ParserError<'_> {
 #[derive(Debug)]
 pub struct RuntimeError {
     pub errmsg: String,
+    pub expression: Expression,
 }
 
 impl Error for RuntimeError {}
 
 impl Display for RuntimeError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Runtime error: {}", self.errmsg)
+        write!(
+            f,
+            "Runtime error: {}\nExpression:\n{}",
+            self.errmsg,
+            format_tree(&self.expression),
+        )
     }
 }

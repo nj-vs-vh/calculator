@@ -7,7 +7,7 @@ pub fn print_tree(expr: &Expression) {
     println!("{}", format_tree(expr));
 }
 
-fn format_tree(expr: &Expression) -> String {
+pub fn format_tree(expr: &Expression) -> String {
     match expr {
         Expression::Value(bv) => {
             let bv_clone = bv.clone();
