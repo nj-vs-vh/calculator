@@ -130,12 +130,14 @@ fn consume_expression<'a>(
     let mut prev_op: Option<Op> = None;
     let mut i = i;
     loop {
+        i = skip_comments(tokens, i);
         (left, i) = if result.is_none() {
             consume_operand(tokens, i)?
         } else {
             (result, i)
         };
 
+        i = skip_comments(tokens, i);
         if let Some(left) = left {
             if i >= tokens.len() || tokens[i].t == TokenType::ExprEnd {
                 return Ok((left, min(i, tokens.len())));
@@ -431,4 +433,12 @@ fn consume_operand<'a>(
         }
         _ => Ok((None, i)),
     }
+}
+
+fn skip_comments(tokens: &[Token], i: usize) -> usize {
+    let mut i = i;
+    while i < tokens.len() && tokens[i].t == TokenType::Comment {
+        i += 1
+    }
+    i
 }

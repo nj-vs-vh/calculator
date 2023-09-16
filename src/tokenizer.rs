@@ -30,6 +30,7 @@ pub enum TokenType {
     While,
     Func,
     Comma,
+    Comment,
 }
 
 #[derive(PartialEq, Eq, Clone)]
@@ -71,7 +72,6 @@ pub fn tokenize<'a>(code: &'a str) -> Result<Vec<Token<'a>>, errors::TokenizerEr
                     lexeme: &code[lookahead_idx - 1..lookahead_idx],
                 }),
                 CharMatch::Whitespace => {}
-                // CharMatch::CommentStart =>
                 CharMatch::Unexpected => {
                     return Err(errors::TokenizerError {
                         code: &code,
@@ -109,6 +109,15 @@ pub fn tokenize<'a>(code: &'a str) -> Result<Vec<Token<'a>>, errors::TokenizerEr
                     })
                 }
             }
+            '#' => {
+                let end_idx: usize;
+                (end_idx, current_char) = iter_while_predicate(&mut code_chars, |ch| ch != '\n')
+                    .unwrap_or((code.len(), None));
+                Some(Token {
+                    t: TokenType::Comment,
+                    lexeme: &code[lookahead_idx..end_idx],
+                })
+            }
             '=' => {
                 let end_idx: usize;
                 (end_idx, current_char) = iter_while_predicate(&mut code_chars, |ch| ch == '=')
@@ -138,23 +147,20 @@ pub fn tokenize<'a>(code: &'a str) -> Result<Vec<Token<'a>>, errors::TokenizerEr
                         error_char_idx: code.len() - 1,
                     },
                 )?;
-                // code_chars.next(); // consuming closing quote
                 current_char = None;
                 Some(Token {
                     t: TokenType::StringLiteral,
                     lexeme: &code[lookahead_idx..=end_idx],
                 })
             }
-            _ => None,
+            _ => {
+                current_char = Some(lookahead_char);
+                None
+            }
         };
 
-        match maybe_long_token {
-            None => {
-                current_char = Some(lookahead_char);
-            }
-            Some(token) => {
-                tokens.push(token);
-            }
+        if let Some(token) = maybe_long_token {
+            tokens.push(token);
         }
     }
 
@@ -209,7 +215,6 @@ fn is_numeric_char(ch: char) -> bool {
 enum CharMatch {
     Token(TokenType),
     Whitespace,
-    // CommentStart,
     Unexpected,
 }
 
@@ -242,7 +247,6 @@ fn match_char(ch: char) -> CharMatch {
             side: BracketSide::Closing,
         })),
         ',' => CharMatch::Token(TokenType::Comma),
-        // '#' => CharMatch::CommentStart,
         ws if ws.is_whitespace() => CharMatch::Whitespace,
         _ => CharMatch::Unexpected,
     }
@@ -285,7 +289,7 @@ pub fn untokenize(tokens: &[Token], minified: bool) -> String {
                 _,
             ) => {
                 current_indent += 1;
-                newline.into()
+                newline
             }
             (
                 // closing block
@@ -296,7 +300,7 @@ pub fn untokenize(tokens: &[Token], minified: bool) -> String {
                 }),
             ) => {
                 current_indent = current_indent.saturating_sub(1);
-                newline.into()
+                newline
             }
             (TokenType::Caret, _) => "",
             (_, TokenType::Caret) => "",
@@ -310,7 +314,7 @@ pub fn untokenize(tokens: &[Token], minified: bool) -> String {
                 }),
             ) => "",
             (_, TokenType::ExprEnd) => "",
-            (TokenType::ExprEnd, _) => newline.into(),
+            (TokenType::ExprEnd, _) => newline,
 
             (
                 TokenType::Bracket(Bracket {
@@ -326,6 +330,7 @@ pub fn untokenize(tokens: &[Token], minified: bool) -> String {
                     side: BracketSide::Closing,
                 }),
             ) => "",
+            (TokenType::Comment, _) => newline,
             _ => " ",
         };
         res.push_str(delimiter);
