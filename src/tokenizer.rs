@@ -181,15 +181,6 @@ pub fn tokenize<'a>(code: &'a str) -> Result<Vec<Token<'a>>, errors::TokenizerEr
             }
         };
     }
-
-    // inserting an implied expression end token, if not present
-    if tokens[tokens.len() - 1].t != TokenType::ExprEnd {
-        tokens.push(Token {
-            t: TokenType::ExprEnd,
-            lexeme: ";",
-        })
-    }
-
     return Ok(tokens);
 }
 
@@ -355,57 +346,49 @@ mod tests {
     use rstest::rstest;
 
     #[rstest]
-    #[case("1", vec![Token{t: TokenType::Number, lexeme: "1"}, Token{t: TokenType::ExprEnd, lexeme: ";"}])]
-    #[case("  1     ", vec![Token{t: TokenType::Number, lexeme: "1"}, Token{t: TokenType::ExprEnd, lexeme: ";"}])]
-    #[case("1 1", vec![Token{t: TokenType::Number, lexeme: "1"}, Token{t: TokenType::Number, lexeme: "1"}, Token{t: TokenType::ExprEnd, lexeme: ";"}])]
+    #[case("1", vec![Token{t: TokenType::Number, lexeme: "1"}])]
+    #[case("  1     ", vec![Token{t: TokenType::Number, lexeme: "1"}])]
+    #[case("1 1", vec![Token{t: TokenType::Number, lexeme: "1"}, Token{t: TokenType::Number, lexeme: "1"}])]
     #[case("1 + 1", vec![
         Token{t: TokenType::Number, lexeme: "1"},
         Token{t: TokenType::Plus, lexeme: "+"},
         Token{t: TokenType::Number, lexeme: "1"},
-        Token{t: TokenType::ExprEnd, lexeme: ";"}
     ])]
     #[case("1+1", vec![
         Token{t: TokenType::Number, lexeme: "1"},
         Token{t: TokenType::Plus, lexeme: "+"},
         Token{t: TokenType::Number, lexeme: "1"},
-        Token{t: TokenType::ExprEnd, lexeme: ";"}
     ])]
     #[case("1  + 1", vec![
         Token{t: TokenType::Number, lexeme: "1"},
         Token{t: TokenType::Plus, lexeme: "+"},
         Token{t: TokenType::Number, lexeme: "1"},
-        Token{t: TokenType::ExprEnd, lexeme: ";"}
     ])]
     #[case("1 +1", vec![
         Token{t: TokenType::Number, lexeme: "1"},
         Token{t: TokenType::Plus, lexeme: "+"},
         Token{t: TokenType::Number, lexeme: "1"},
-        Token{t: TokenType::ExprEnd, lexeme: ";"}
     ])]
     #[case("1+ 1", vec![
         Token{t: TokenType::Number, lexeme: "1"},
         Token{t: TokenType::Plus, lexeme: "+"},
         Token{t: TokenType::Number, lexeme: "1"},
-        Token{t: TokenType::ExprEnd, lexeme: ";"}
     ])]
     #[case("   1      + \n  1  ", vec![
         Token{t: TokenType::Number, lexeme: "1"},
         Token{t: TokenType::Plus, lexeme: "+"},
         Token{t: TokenType::Number, lexeme: "1"},
-        Token{t: TokenType::ExprEnd, lexeme: ";"}
     ])]
-    #[case("a", vec![Token{t: TokenType::Identifier, lexeme: "a"}, Token{t: TokenType::ExprEnd, lexeme: ";"}])]
+    #[case("a", vec![Token{t: TokenType::Identifier, lexeme: "a"}])]
     #[case("a^b", vec![
         Token{t: TokenType::Identifier, lexeme: "a"},
         Token{t: TokenType::Caret, lexeme: "^"},
         Token{t: TokenType::Identifier, lexeme: "b"},
-        Token{t: TokenType::ExprEnd, lexeme: ";"},
     ])]
     #[case("1  /  abc123def            ", vec![
         Token{t: TokenType::Number, lexeme: "1"},
         Token{t: TokenType::Slash, lexeme: "/"},
         Token{t: TokenType::Identifier, lexeme: "abc123def"},
-        Token{t: TokenType::ExprEnd, lexeme: ";"},
     ])]
     fn test_tokenizer(#[case] code: &str, #[case] expected_result: Vec<Token>) {
         let code_ = String::from(code);

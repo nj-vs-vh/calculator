@@ -203,6 +203,9 @@ fn consume_expression<'a>(
                 right: Box::new(right),
             });
         } else {
+            if i >= tokens.len() || tokens[i].t == TokenType::ExprEnd {
+                return Ok((Expression::Value(Box::new(Value::Nothing)), i));
+            }
             let next_unary_op = match tokens[i].t {
                 TokenType::Minus => UnaryOp::Neg,
                 TokenType::Bang => UnaryOp::Neg,
@@ -242,7 +245,7 @@ fn consume_operand<'a>(
         }
     };
 
-    if i > tokens.len() {
+    if i >= tokens.len() {
         return Ok((None, i));
     }
     let next = &tokens[i];

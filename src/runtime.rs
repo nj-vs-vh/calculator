@@ -57,9 +57,7 @@ pub fn eval(
             is_returnable,
         } => {
             if body.is_empty() {
-                return Err(RuntimeError {
-                    errmsg: "empty scope".into(),
-                });
+                return Ok(Box::new(Value::Nothing));
             }
             let mut results: Vec<Box<Value>> = Vec::new();
             for expr in body.iter() {
