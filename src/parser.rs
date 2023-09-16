@@ -375,50 +375,23 @@ fn consume_operand<'a>(
         }
         TokenType::Func => {
             let mut j = i + 1;
-            let func_declaration: Expression;
-            (func_declaration, j) = consume_expression(tokens, j, None, true)?;
-            let func_declaration = match func_declaration {
-                Expression::BinaryOperation {
-                    op: BinaryOp::FunctionCall,
-                    left,
-                    right,
-                } => match (left.as_ref(), right.as_ref()) {
-                    (Expression::Variable(func_name), Expression::Variable(func_param)) => {
-                        Some((func_name.clone(), func_param.clone()))
-                    }
-                    _ => None,
-                },
-                _ => None,
-            };
-            j = advance_if_type(j, TokenType::ExprEnd);
-
-            if let Some((func_name, func_param)) = func_declaration {
-                let mut func_body: Expression;
-                (func_body, j) = consume_expression(tokens, j, None, false)?;
-                func_body = match func_body {
-                    Expression::Scope {
-                        body,
-                        is_returnable: _,
-                    } => Expression::Scope {
-                        body: body,
-                        is_returnable: true,
-                    },
-                    other => other,
-                };
-                return Ok((
-                    Some(Expression::BinaryOperation {
-                        op: BinaryOp::Assign,
-                        left: Box::new(Expression::Variable(func_name.clone())),
-                        right: Box::new(Expression::Value(Box::new(Value::Function(
-                            Function::UserDefined(UserDefinedFunction {
-                                name: func_name,
-                                arg_name: func_param,
-                                body: func_body,
-                            }),
-                        )))),
-                    }),
-                    j,
-                ));
+            let func_declaration_expr: Expression;
+            (func_declaration_expr, j) = consume_expression(tokens, j, None, true)?;
+            let (func_name, func_params) = if let Expression::BinaryOperation {
+                op: BinaryOp::FunctionCall,
+                left,
+                right,
+            } = func_declaration_expr
+            {
+                if let Expression::Variable(func_name) = left.clone().as_ref() {
+                    (func_name.clone(), *right.clone())
+                } else {
+                    return Err(ParserError {
+                        tokens: tokens,
+                        errmsg: "functon name expected here".into(),
+                        error_token_idx: i + 1,
+                    });
+                }
             } else {
                 return Err(ParserError {
                     tokens,
@@ -426,6 +399,35 @@ fn consume_operand<'a>(
                     error_token_idx: i + 1,
                 });
             };
+
+            j = advance_if_type(j, TokenType::ExprEnd);
+
+            let mut func_body: Expression;
+            (func_body, j) = consume_expression(tokens, j, None, false)?;
+            func_body = match func_body {
+                Expression::Scope {
+                    body,
+                    is_returnable: _,
+                } => Expression::Scope {
+                    body: body,
+                    is_returnable: true,
+                },
+                other => other,
+            };
+            return Ok((
+                Some(Expression::BinaryOperation {
+                    op: BinaryOp::Assign,
+                    left: Box::new(Expression::Variable(func_name.clone())),
+                    right: Box::new(Expression::Value(Box::new(Value::Function(
+                        Function::UserDefined(UserDefinedFunction {
+                            name: func_name,
+                            params: func_params.clone(),
+                            body: func_body,
+                        }),
+                    )))),
+                }),
+                j,
+            ));
         }
         _ => Ok((None, i)),
     }

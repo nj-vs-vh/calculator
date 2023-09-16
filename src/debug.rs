@@ -14,7 +14,7 @@ fn format_tree(expr: &Expression) -> String {
             let v = bv_clone.as_ref();
             match v {
                 Value::Function(Function::UserDefined(func)) => format_subexpressions(
-                    &format!("Function {}({})", func.name, func.arg_name),
+                    &format!("Function {}({:?})", func.name, func.params),
                     [&func.body].iter().map(|&e| e),
                     1,
                 ),

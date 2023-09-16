@@ -76,48 +76,48 @@ pub fn eval(
             }
             return Ok(results[results.len() - 1].clone());
         }
-        Expression::BinaryOperation { op, left, right } => {
-            if let BinaryOp::Assign = op {
-                return eval_assignment(&left, &right, vars);
-            }
-            let right_value = eval(&right, vars)?;
-            let left_value = eval(&left, vars)?;
-            match op {
-                BinaryOp::Add => apply_bin!(add, left_value, right_value, "addition"),
-                BinaryOp::Sub => apply_bin!(sub, left_value, right_value, "subtraction"),
-                BinaryOp::Mul => apply_bin!(mul, left_value, right_value, "multiplication"),
-                BinaryOp::Div => apply_bin!(div, left_value, right_value, "division"),
-                BinaryOp::Pow => apply_bin!(pow, left_value, right_value, "power"),
-                BinaryOp::IsEq => apply_bin!(eq, left_value, right_value, "equality"),
-                BinaryOp::IsLt => apply_bin!(lt, left_value, right_value, "less-than"),
-                BinaryOp::IsGt => apply_bin!(gt, left_value, right_value, "greater-than"),
-                BinaryOp::FormTuple => Ok(Box::new(Value::Tuple(vec![left_value, right_value]))),
-                BinaryOp::AppendToTuple => {
-                    if let Value::Tuple(left_tuple) = left_value.to_owned().as_ref() {
-                        let mut left_tuple_copy = left_tuple.clone();
-                        left_tuple_copy.push(right_value);
-                        Ok(Box::new(Value::Tuple(left_tuple_copy)))
-                    } else {
-                        Err(RuntimeError {
-                            errmsg: "internal error: can't append to non-tuple value".into(),
-                        })
-                    }
+        Expression::BinaryOperation { op, left, right } => match op {
+            BinaryOp::Assign => eval_assignment(&left, &right, vars),
+            BinaryOp::FunctionCall => {
+                let left_value = eval(&left, vars)?;
+                if let Value::Function(func) = left_value.clone().as_ref() {
+                    func.call(right, &vars)
+                } else {
+                    Err(RuntimeError {
+                        errmsg: "not callable".into(),
+                    })
                 }
-                BinaryOp::FunctionCall => {
-                    if let Value::Function(func) = left_value.clone().as_ref() {
-                        match func.call(right_value, &vars) {
-                            Ok(result) => Ok(result),
-                            Err(message) => Err(RuntimeError { errmsg: message }),
+            }
+            ltr_op => {
+                let right_value = eval(&right, vars)?;
+                let left_value = eval(&left, vars)?;
+                match ltr_op {
+                    BinaryOp::Add => apply_bin!(add, left_value, right_value, "addition"),
+                    BinaryOp::Sub => apply_bin!(sub, left_value, right_value, "subtraction"),
+                    BinaryOp::Mul => apply_bin!(mul, left_value, right_value, "multiplication"),
+                    BinaryOp::Div => apply_bin!(div, left_value, right_value, "division"),
+                    BinaryOp::Pow => apply_bin!(pow, left_value, right_value, "power"),
+                    BinaryOp::IsEq => apply_bin!(eq, left_value, right_value, "equality"),
+                    BinaryOp::IsLt => apply_bin!(lt, left_value, right_value, "less-than"),
+                    BinaryOp::IsGt => apply_bin!(gt, left_value, right_value, "greater-than"),
+                    BinaryOp::FormTuple => {
+                        Ok(Box::new(Value::Tuple(vec![left_value, right_value])))
+                    }
+                    BinaryOp::AppendToTuple => {
+                        if let Value::Tuple(left_tuple) = left_value.to_owned().as_ref() {
+                            let mut left_tuple_copy = left_tuple.clone();
+                            left_tuple_copy.push(right_value);
+                            Ok(Box::new(Value::Tuple(left_tuple_copy)))
+                        } else {
+                            Err(RuntimeError {
+                                errmsg: "internal error: can't append to non-tuple value".into(),
+                            })
                         }
-                    } else {
-                        Err(RuntimeError {
-                            errmsg: "not callable".into(),
-                        })
                     }
+                    _ => panic!("RTL op "),
                 }
-                BinaryOp::Assign => panic!("LTR assign"),
             }
-        }
+        },
         Expression::UnaryOperation { op, operand } => {
             let operand = eval(&operand, vars)?;
             match op {
@@ -178,7 +178,7 @@ pub fn eval(
     }
 }
 
-fn eval_assignment(
+pub fn eval_assignment(
     left: &Expression,
     right: &Expression,
     vars: &mut HashMap<String, Box<Value>>,
@@ -447,6 +447,8 @@ mod tests {
     #[case("a, b = 1, 2; a + b", Value::Int(3))]
     #[case("a, (b, c) = 1, (2, 3); a + b + c", Value::Int(6))]
     #[case("sum = a + b = 3 + 7; a", Value::Int(3))]
+    #[case("func add(a, b) a + b; add(1, 2)", Value::Int(3))]
+    #[case("func add(a, (b + c)) a + b + c; add(1, (2 + 3))", Value::Int(6))]
     fn test_runtime_basic(#[case] code: &str, #[case] expected_result: Value) {
         let code_ = String::from(code);
         let tokens = tokenize(&code_).unwrap();
