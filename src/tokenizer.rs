@@ -269,7 +269,7 @@ pub fn untokenize(tokens: &[Token], minified: bool) -> String {
     token_iter_2.next();
 
     let mut current_indent: usize = 0;
-    let indent_spaces: usize = if minified { 0 } else { 2 };
+    let indent_spaces: usize = if minified { 0 } else { 4 };
 
     let newline = if minified { " " } else { "\n" };
 
