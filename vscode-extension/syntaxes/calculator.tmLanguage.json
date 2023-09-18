@@ -1,0 +1,45 @@
+{
+	"$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+	"name": "Calculator",
+	"patterns": [
+		{
+			"name": "keyword.calculator",
+			"match": "\\b(if|else|while|return|func)\\b"
+		},
+		{
+			"name": "string.calculator",
+			"begin": "\"",
+			"end": "\""
+		},
+		{
+			"include": "#builtin_functions"
+		},
+		{
+			"match": "\\b([a-zA-Z][a-zA-Z0-9_]*)\\s*\\(",
+			"captures": {
+				"1": {
+					"name": "entity.name.function.calculator"
+				}
+			}
+		},
+		{
+			"name": "constant.numeric.calculator",
+			"match": "\\b[\\d.]+\\b"
+		},
+		{
+			"name": "constant.boolean.calculator",
+			"match": "(?i)\\b(true|false)\\b"
+		},
+		{
+			"name": "variable.calculator",
+			"match": "\\b[a-zA-Z][a-zA-Z0-9_]*\\b"
+		}
+	],
+	"repository": {
+		"builtin_functions": {
+					"name": "support.function.builtin.calculator",
+					"match": "\\b(log|exp|print|length|random|mod)\\b"
+		}
+	},
+	"scopeName": "source.calculator"
+}

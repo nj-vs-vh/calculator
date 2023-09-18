@@ -1,0 +1,25 @@
+{
+  "name": "calculator-vscode",
+  "displayName": "calculator-vscode",
+  "description": "",
+  "version": "0.0.1",
+  "engines": {
+    "vscode": "^1.82.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "contributes": {
+    "languages": [{
+      "id": "calculator",
+      "aliases": ["Calculator", "calculator"],
+      "extensions": [".clc",".calc"],
+      "configuration": "./language-configuration.json"
+    }],
+    "grammars": [{
+      "language": "calculator",
+      "scopeName": "source.calculator",
+      "path": "./syntaxes/calculator.tmLanguage.json"
+    }]
+  }
+}
