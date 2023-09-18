@@ -7,7 +7,7 @@ use crate::{
         Value,
     },
 };
-use std::cmp::min;
+use std::{cmp::min, rc::Rc};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BinaryOp {
@@ -70,7 +70,7 @@ impl Op {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Expression {
-    Value(Box<Value>),
+    Value(Rc<Value>),
     Variable(String),
     BinaryOperation {
         op: BinaryOp,
@@ -204,7 +204,7 @@ fn consume_expression<'a>(
             });
         } else {
             if i >= tokens.len() || tokens[i].t == TokenType::ExprEnd {
-                return Ok((Expression::Value(Box::new(Value::Nothing)), i));
+                return Ok((Expression::Value(Rc::new(Value::Nothing)), i));
             }
             let next_unary_op = match tokens[i].t {
                 TokenType::Minus => UnaryOp::Neg,
@@ -274,16 +274,16 @@ fn consume_operand<'a>(
                     });
                 }
             };
-            return Ok((Some(Expression::Value(Box::new(value))), i + 1));
+            return Ok((Some(Expression::Value(Rc::new(value))), i + 1));
         }
         TokenType::StringLiteral => Ok((
-            Some(Expression::Value(Box::new(Value::String(
+            Some(Expression::Value(Rc::new(Value::String(
                 next.lexeme[1..next.lexeme.len() - 1].into(),
             )))),
             i + 1,
         )),
         TokenType::BoolLiteral => Ok((
-            Some(Expression::Value(Box::new(Value::Bool(
+            Some(Expression::Value(Rc::new(Value::Bool(
                 next.lexeme.to_lowercase() == "true",
             )))),
             i + 1,
@@ -324,7 +324,7 @@ fn consume_operand<'a>(
 
             let bracketed_tokens = &tokens[i + 1..j - 1];
             if bracketed_tokens.len() == 0 {
-                return Ok((Some(Expression::Value(Box::new(Value::Nothing))), j));
+                return Ok((Some(Expression::Value(Rc::new(Value::Nothing))), j));
             }
 
             let bracketed_expr = match bracket_type {
@@ -423,7 +423,7 @@ fn consume_operand<'a>(
                 Some(Expression::BinaryOperation {
                     op: BinaryOp::Assign,
                     left: Box::new(Expression::Variable(func_name.clone())),
-                    right: Box::new(Expression::Value(Box::new(Value::Function(
+                    right: Box::new(Expression::Value(Rc::new(Value::Function(
                         Function::UserDefined(UserDefinedFunction {
                             name: func_name,
                             params: func_params.clone(),

@@ -1,4 +1,4 @@
-use std::fmt::Display;
+use std::{fmt::Display, rc::Rc};
 
 use crate::values::function::Function;
 pub mod builtins;
@@ -12,9 +12,9 @@ pub enum Value {
     String(String),
     Bool(bool),
     Function(Function),
-    Tuple(Vec<Box<Value>>),
+    Tuple(Vec<Rc<Value>>),
     // service values for control flow
-    Returned(Box<Value>),
+    Returned(Rc<Value>),
 }
 
 impl Value {

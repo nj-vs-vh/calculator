@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::ops::Deref;
+use std::rc::Rc;
 
 use crate::errors::RuntimeError;
 use crate::parser::{BinaryOp, Expression, UnaryOp};
@@ -8,19 +9,16 @@ use crate::values::function::Function;
 use crate::values::Value;
 
 macro_rules! apply_bin {
-    ( $func:expr, $left:expr, $right:expr, $op_name:expr, $parent:expr ) => {{
+    ( $func:expr, $left:expr, $right:expr, $op_name:expr ) => {{
         let maybe_res = $func(&$left, &$right);
         match maybe_res {
-            Some(v) => Ok(Box::new(v)),
-            None => Err(RuntimeError {
-                errmsg: format!(
-                    "{} is not defined for {} and {}",
-                    $op_name,
-                    $left.type_name(),
-                    $right.type_name()
-                ),
-                expression: $parent.clone(),
-            }),
+            Some(v) => Ok(Rc::new(v)),
+            None => Err(format!(
+                "{} is not defined for {} and {}",
+                $op_name,
+                $left.type_name(),
+                $right.type_name()
+            )),
         }
     }};
 }
@@ -29,10 +27,10 @@ macro_rules! apply_un {
     ( $func:expr, $left:expr, $op_name:expr, $parent:expr ) => {{
         let maybe_res = $func(&$left);
         match maybe_res {
-            Some(v) => Ok(Box::new(v)),
+            Some(v) => Ok(Rc::new(v)),
             None => Err(RuntimeError {
                 errmsg: format!("{} is not defined for {}", $op_name, $left.type_name(),),
-                expression: $parent.clone(),
+                traceback: vec![$parent.clone()],
             }),
         }
     }};
@@ -40,20 +38,28 @@ macro_rules! apply_un {
 
 pub fn eval(
     expression: &Expression,
-    vars: &mut HashMap<String, Box<Value>>,
-) -> Result<Box<Value>, RuntimeError> {
+    vars: &mut HashMap<String, Rc<Value>>,
+) -> Result<Rc<Value>, RuntimeError> {
+    let new_error = |errmsg: String| RuntimeError {
+        errmsg,
+        traceback: vec![expression.clone()],
+    };
+    let extend_traceback = |e: RuntimeError| RuntimeError {
+        errmsg: e.errmsg,
+        traceback: [e.traceback, vec![expression.clone()]].concat(),
+    };
     match expression {
-        Expression::Value(v) => Ok(v.clone()),
+        Expression::Value(v) => Ok(Rc::clone(v)),
         Expression::Variable(var_name) => {
-            if let Some(value) = vars.get(var_name).map(|ref_| ref_.clone()) {
+            if let Some(value) = vars.get(var_name).map(|v| Rc::clone(v)) {
                 return Ok(value);
             } else if let Some(builtin_func) = builtin(&var_name) {
-                return Ok(Box::new(Value::Function(builtin_func)));
+                return Ok(Rc::new(Value::Function(builtin_func)));
             } else {
-                return Err(RuntimeError {
-                    errmsg: format!("reference to non-existent variable \"{}\"", var_name),
-                    expression: expression.clone(),
-                });
+                return Err(new_error(format!(
+                    "reference to non-existent variable \"{}\"",
+                    var_name
+                )));
             }
         }
         Expression::Scope {
@@ -61,9 +67,9 @@ pub fn eval(
             is_returnable,
         } => {
             if body.is_empty() {
-                return Ok(Box::new(Value::Nothing));
+                return Ok(Rc::new(Value::Nothing));
             }
-            let mut results: Vec<Box<Value>> = Vec::new();
+            let mut results: Vec<Rc<Value>> = Vec::new();
             for expr in body.iter() {
                 let expr_value = eval(expr, vars)?;
                 if let Value::Returned(v) = expr_value.clone().deref() {
@@ -79,94 +85,65 @@ pub fn eval(
             return Ok(results[results.len() - 1].clone());
         }
         Expression::BinaryOperation { op, left, right } => match op {
-            BinaryOp::Assign => {
-                eval_assignment(&left, &right, vars).map_err(|errmsg| RuntimeError {
-                    errmsg,
-                    expression: expression.clone(),
-                })
-            }
+            BinaryOp::Assign => eval_assignment(&left, &right, vars).map_err(new_error),
             BinaryOp::FunctionCall => {
                 let left_value = eval(&left, vars)?;
                 if let Value::Function(func) = left_value.as_ref() {
                     match func {
                         Function::Builtin(builtin_func) => {
-                            let arg_value = eval(&right, vars)?;
-                            builtin_func(&arg_value).map(|v| Box::new(v)).map_err(|e| {
-                                RuntimeError {
-                                    errmsg: e,
-                                    expression: expression.clone(),
-                                }
-                            })
+                            let arg_value = eval(&right, vars).map_err(extend_traceback)?;
+                            builtin_func(&arg_value)
+                                .map(|v| Rc::new(v))
+                                .map_err(new_error)
                         }
                         Function::UserDefined(func) => {
                             let mut local_vars = vars.clone();
-                            eval_assignment(&func.params, &right, &mut local_vars).map_err(
-                                |errmsg| RuntimeError {
-                                    errmsg,
-                                    expression: expression.clone(),
-                                },
-                            )?;
-                            eval(&func.body, &mut local_vars)
+                            eval_assignment(&func.params, &right, &mut local_vars)
+                                .map_err(new_error)?;
+                            eval(&func.body, &mut local_vars).map_err(extend_traceback)
                         }
                     }
                 } else {
-                    Err(RuntimeError {
-                        errmsg: "not callable".into(),
-                        expression: expression.clone(),
-                    })
+                    Err(new_error(format!(
+                        "\"{}\" is not callable",
+                        left_value.type_name()
+                    )))
                 }
             }
             ltr_op => {
-                let right_value = eval(&right, vars)?;
-                let left_value = eval(&left, vars)?;
+                let right_value = eval(&right, vars).map_err(extend_traceback)?;
+                let left_value = eval(&left, vars).map_err(extend_traceback)?;
                 match ltr_op {
-                    BinaryOp::Add => {
-                        apply_bin!(add, left_value, right_value, "addition", expression)
-                    }
-                    BinaryOp::Sub => {
-                        apply_bin!(sub, left_value, right_value, "subtraction", expression)
-                    }
-                    BinaryOp::Mul => {
-                        apply_bin!(mul, left_value, right_value, "multiplication", expression)
-                    }
-                    BinaryOp::Div => {
-                        apply_bin!(div, left_value, right_value, "division", expression)
-                    }
-                    BinaryOp::Pow => apply_bin!(pow, left_value, right_value, "power", expression),
-                    BinaryOp::IsEq => {
-                        apply_bin!(eq, left_value, right_value, "equality", expression)
-                    }
-                    BinaryOp::IsLt => {
-                        apply_bin!(lt, left_value, right_value, "less-than", expression)
-                    }
-                    BinaryOp::IsGt => {
-                        apply_bin!(gt, left_value, right_value, "greater-than", expression)
-                    }
-                    BinaryOp::FormTuple => {
-                        Ok(Box::new(Value::Tuple(vec![left_value, right_value])))
-                    }
+                    BinaryOp::Add => apply_bin!(add, left_value, right_value, "addition"),
+                    BinaryOp::Sub => apply_bin!(sub, left_value, right_value, "subtraction"),
+                    BinaryOp::Mul => apply_bin!(mul, left_value, right_value, "multiplication"),
+                    BinaryOp::Div => apply_bin!(div, left_value, right_value, "division"),
+                    BinaryOp::Pow => apply_bin!(pow, left_value, right_value, "power"),
+                    BinaryOp::IsEq => apply_bin!(eq, left_value, right_value, "equality"),
+                    BinaryOp::IsLt => apply_bin!(lt, left_value, right_value, "less-than"),
+                    BinaryOp::IsGt => apply_bin!(gt, left_value, right_value, "greater-than"),
+                    BinaryOp::FormTuple => Ok(Rc::new(Value::Tuple(vec![left_value, right_value]))),
                     BinaryOp::AppendToTuple => {
                         if let Value::Tuple(left_tuple) = left_value.to_owned().as_ref() {
                             let mut left_tuple_copy = left_tuple.clone();
                             left_tuple_copy.push(right_value);
-                            Ok(Box::new(Value::Tuple(left_tuple_copy)))
+                            Ok(Rc::new(Value::Tuple(left_tuple_copy)))
                         } else {
-                            Err(RuntimeError {
-                                errmsg: "internal error: can't append to non-tuple value".into(),
-                                expression: expression.clone(),
-                            })
+                            Err("internal error: can't append to non-tuple value".into())
                         }
                     }
                     _ => panic!("RTL op "),
                 }
+                .map_err(new_error)
             }
         },
         Expression::UnaryOperation { op, operand } => {
-            let operand = eval(&operand, vars)?;
+            let operand = eval(&operand, vars).map_err(extend_traceback)?;
             match op {
                 UnaryOp::Neg => apply_un!(neg, operand, "negation", expression),
-                UnaryOp::Return => Ok(Box::new(Value::Returned(operand))),
+                UnaryOp::Return => Ok(Rc::new(Value::Returned(operand))),
             }
+            .map_err(extend_traceback)
         }
         Expression::If {
             condition,
@@ -180,16 +157,13 @@ pub fn eval(
                 } else if let Some(if_false_expr) = if_false {
                     Ok(eval(&if_false_expr, vars)?)
                 } else {
-                    Ok(Box::new(Value::Nothing))
+                    Ok(Rc::new(Value::Nothing))
                 }
             } else {
-                Err(RuntimeError {
-                    errmsg: format!(
-                        "if condition must evaluate to bool, got {}",
-                        condition.type_name()
-                    ),
-                    expression: expression.clone(),
-                })
+                Err(new_error(format!(
+                    "if condition must evaluate to bool, got {}",
+                    condition.type_name()
+                )))
             }
         }
         Expression::While {
@@ -197,7 +171,7 @@ pub fn eval(
             body,
             if_completed: _, // TBD
         } => {
-            let mut last_result = Box::new(Value::Nothing);
+            let mut last_result = Rc::new(Value::Nothing);
             loop {
                 let condition = eval(&condition, vars)?;
                 if let Value::Bool(run_loop_iteration) = condition.clone().as_ref() {
@@ -210,13 +184,10 @@ pub fn eval(
                         return Ok(last_result);
                     }
                 } else {
-                    return Err(RuntimeError {
-                        errmsg: format!(
-                            "while loop condition must evaluate to bool, got {}",
-                            condition.type_name()
-                        ),
-                        expression: expression.clone(),
-                    });
+                    return Err(new_error(format!(
+                        "while loop condition must evaluate to bool, got {}",
+                        condition.type_name()
+                    )));
                 }
             }
         }
@@ -226,8 +197,8 @@ pub fn eval(
 pub fn eval_assignment(
     left: &Expression,
     right: &Expression,
-    vars: &mut HashMap<String, Box<Value>>,
-) -> Result<Box<Value>, String> {
+    vars: &mut HashMap<String, Rc<Value>>,
+) -> Result<Rc<Value>, String> {
     if let Expression::Variable(var_name) = left {
         let right_value = eval(right, vars).map_err(|e| e.errmsg)?;
         vars.insert(var_name.clone(), right_value.clone());
@@ -448,7 +419,7 @@ mod tests {
     #[case("a = 3; b = 5; res = if a < b 1 else 2; res", Value::Int(1))]
     #[case("a = 3; b = 5; res = if (a < b) { 1 } else { 2 }; res", Value::Int(1))]
     #[case("return 1; 2; 3; 4; 5; 6;", Value::Int(1))]
-    #[case("return return 1", Value::Returned(Box::new(Value::Int(1))))]
+    #[case("return return 1", Value::Returned(Rc::new(Value::Int(1))))]
     #[case("if !(1 == 2) {return 1}; return 2", Value::Int(1))]
     #[case("if (1 == 2) {return 1}; return 2", Value::Int(2))]
     #[case("if (1 == 2) {return 1}; 2;", Value::Int(2))]
@@ -471,24 +442,24 @@ mod tests {
         "func fib(n); {if (n < 3) {return 1;} else {return fib(n - 1) + fib(n - 2);}}; fib(12)",
         Value::Int(144)
     )]
-    #[case("1, 2", Value::Tuple(vec![Box::new(Value::Int(1)), Box::new(Value::Int(2))]))]
-    #[case("(1, 2)", Value::Tuple(vec![Box::new(Value::Int(1)), Box::new(Value::Int(2))]))]
+    #[case("1, 2", Value::Tuple(vec![Rc::new(Value::Int(1)), Rc::new(Value::Int(2))]))]
+    #[case("(1, 2)", Value::Tuple(vec![Rc::new(Value::Int(1)), Rc::new(Value::Int(2))]))]
     #[case("(1, 2, 3)", Value::Tuple(vec![
-        Box::new(Value::Int(1)),
-        Box::new(Value::Int(2)),
-        Box::new(Value::Int(3)),
+        Rc::new(Value::Int(1)),
+        Rc::new(Value::Int(2)),
+        Rc::new(Value::Int(3)),
     ]))]
     #[case("((1, 2), 3)", Value::Tuple(vec![
-        Box::new(Value::Tuple(vec![
-            Box::new(Value::Int(1)),
-            Box::new(Value::Int(2)),
+        Rc::new(Value::Tuple(vec![
+            Rc::new(Value::Int(1)),
+            Rc::new(Value::Int(2)),
         ])),
-        Box::new(Value::Int(3)),
+        Rc::new(Value::Int(3)),
     ]))]
-    #[case("a, b = 1, 2", Value::Tuple(vec![Box::new(Value::Int(1)), Box::new(Value::Int(2))]))]
+    #[case("a, b = 1, 2", Value::Tuple(vec![Rc::new(Value::Int(1)), Rc::new(Value::Int(2))]))]
     #[case("-b = -1; b", Value::Int(1))]
     #[case("a = -b = -1; a", Value::Int(-1))]
-    #[case("tup = a, b = 1, 2; tup", Value::Tuple(vec![Box::new(Value::Int(1)), Box::new(Value::Int(2))]))]
+    #[case("tup = a, b = 1, 2; tup", Value::Tuple(vec![Rc::new(Value::Int(1)), Rc::new(Value::Int(2))]))]
     #[case("a, b = 1, 2; a + b", Value::Int(3))]
     #[case("a, (b, c) = 1, (2, 3); a + b + c", Value::Int(6))]
     #[case("sum = a + b = 3 + 7; a", Value::Int(3))]

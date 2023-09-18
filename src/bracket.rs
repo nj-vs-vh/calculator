@@ -44,7 +44,7 @@ impl BracketStack {
                 Ok(())
             }
             BracketSide::Closing => {
-                if self.stack.is_empty() || self.stack[self.stack.len() - 1] != bracket.type_ {
+                if self.stack.is_empty() || self.stack.last().unwrap() != &bracket.type_ {
                     Err("unmatched closing bracket".into())
                 } else {
                     self.stack.pop();

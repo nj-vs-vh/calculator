@@ -1,5 +1,7 @@
 use std::{error::Error, fmt::Display};
 
+use itertools::Itertools;
+
 use crate::debug::format_tree;
 use crate::parser::Expression;
 use crate::tokenizer::untokenize;
@@ -136,18 +138,35 @@ impl Display for ParserError<'_> {
 #[derive(Debug)]
 pub struct RuntimeError {
     pub errmsg: String,
-    pub expression: Expression,
+    pub traceback: Vec<Expression>,
 }
 
 impl Error for RuntimeError {}
 
 impl Display for RuntimeError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut traceback_dump: String = String::new();
+        let indent = 4;
+        for (idx, expression) in self.traceback.iter().enumerate() {
+            let mut expression_dump = format_tree(expression)
+                .lines()
+                .enumerate()
+                .map(|(line_idx, line)| {
+                    format!(
+                        "{}{} {}",
+                        (if line_idx == 0 { "=" } else { " " }).repeat(2 + idx * indent),
+                        (if line_idx == 0 { ">" } else { " " }),
+                        line
+                    )
+                })
+                .join("\n");
+            expression_dump.push('\n');
+            traceback_dump.push_str(&expression_dump);
+        }
         write!(
             f,
-            "Runtime error: {}\nExpression:\n{}",
-            self.errmsg,
-            format_tree(&self.expression),
+            "Runtime error: {}\nTraceback:\n{}",
+            self.errmsg, traceback_dump,
         )
     }
 }
